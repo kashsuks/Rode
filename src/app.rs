@@ -129,11 +129,21 @@ impl CatEditorApp {
                 self.should_quit = true;
             }
             "w" => {
-                println!("Save file (not implemented)");
-                self.mode = Mode::Normal;
+                if let Some(path) = &self.current_file {
+                    let _ = std::fs::write(path, &self.text);
+                    self.mode = Mode::Normal;
+                } else {
+                    if let Some(path) = rfd::FileDialog::new().save_file() {
+                        let _ = std::fs::write(&path, &self.text);
+                        self.current_file = Some(path.display().to_string());
+                        self.mode = Mode::Normal;
+                    }
+                }
             }
             "wq" => {
-                println!("Save and quit (also not implemented yet)");
+                if let Some(path) = &self.current_file {
+                    let _ = std::fs::write(path, &self.text);
+                }
                 self.should_quit = true;
             }
             _ => {

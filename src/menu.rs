@@ -29,11 +29,21 @@ fn show_file_menu(ui: &mut egui::Ui, ctx: &egui::Context, app: &mut CatEditorApp
         }
         ui.separator();
         if ui.button("Save").clicked() {
-            println!("Save clicked");
+            if let Some(path) = &app.current_file {
+                let _ = std::fs::write(path, &app.text);
+            } else {
+                if let Some(path) = rfd::FileDialog::new().save_file() {
+                    let _ = std::fs::write(&path, &app.text);
+                    app.current_file = Some(path.display().to_string());
+                }
+            }
             ui.close_menu();
         }
         if ui.button("Save as...").clicked() {
-            println!("Save as clicked");
+            if let Some(path) = rfd::FileDialog::new().save_file() {
+                let _ = std::fs::write(&path, &app.text);
+                app.current_file = Some(path.display().to_string());
+            }
             ui.close_menu();
         }
         ui.separator();
