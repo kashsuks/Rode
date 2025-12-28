@@ -13,6 +13,7 @@ pub struct CatEditorApp {
     pub mode: Mode,
     pub command_buffer: String,
     pub should_quit: bool,
+    pub current_file: Option<String>,
 }
 
 impl Default for CatEditorApp {
@@ -22,6 +23,7 @@ impl Default for CatEditorApp {
             mode: Mode::Insert,
             command_buffer: String::new(),
             should_quit: false,
+            current_file: None,
         }
     }
 }

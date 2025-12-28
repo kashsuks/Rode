@@ -11,14 +11,20 @@ pub fn show_menu_bar(ctx: &egui::Context, app: &mut CatEditorApp) {
     });
 }
 
-fn show_file_menu(ui: &mut egui::Ui, ctx: &egui::Context, _app: &mut CatEditorApp) {
+fn show_file_menu(ui: &mut egui::Ui, ctx: &egui::Context, app: &mut CatEditorApp) {
     ui.menu_button("File", |ui| {
         if ui.button("New").clicked() {
-            println!("New clicked");
+            app.text.clear();
+            app.current_file = None;
             ui.close_menu();
         }
         if ui.button("Open...").clicked() {
-            println!("Open clicked");
+            if let Some(path) = rfd::FileDialog::new().pick_file() {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    app.text = content;
+                    app.current_file = Some(path.display().to_string());
+                }
+            }
             ui.close_menu();
         }
         ui.separator();
