@@ -1,5 +1,6 @@
 use eframe::egui;
 use crate::menu;
+use crate::theme;
 
 #[derive(PartialEq)]
 pub enum Mode {
@@ -38,6 +39,8 @@ impl eframe::App for CatEditorApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
+
+        theme::apply_catppuccin(ctx);
 
         ctx.input(|i| {
             if self.mode == Mode::Insert {
