@@ -17,6 +17,34 @@ pub struct CatEditorApp {
     pub current_file: Option<String>,
     pub cursor_pos: usize,            // character index (CCursor index)
     pub pending_motion: Option<char>,
+
+    //theme stuff
+    pub color_rosewater: String,
+    pub color_flamingo: String,
+    pub color_pink: String,
+    pub color_mauve: String,
+    pub color_red: String,
+    pub color_maroon: String,
+    pub color_peach: String,
+    pub color_yellow: String,
+    pub color_green: String,
+    pub color_teal: String,
+    pub color_sky: String,
+    pub color_sapphire: String,
+    pub color_blue: String,
+    pub color_lavender: String,
+    pub color_text: String,
+    pub color_subtext1: String,
+    pub color_subtext0: String,
+    pub color_overlay2: String,
+    pub color_overlay1: String,
+    pub color_overlay0: String,
+    pub color_surface2: String,
+    pub color_surface1: String,
+    pub color_surface0: String,
+    pub color_base: String,
+    pub color_mantle: String,
+    pub color_crust: String,
 }
 
 impl Default for CatEditorApp {
@@ -29,6 +57,33 @@ impl Default for CatEditorApp {
             current_file: None,
             cursor_pos: 0,
             pending_motion: None,
+
+            color_rosewater: "#f5e0dc".to_string(),
+            color_flamingo: "#f2cdcd".to_string(),
+            color_pink: "#f5c2e7".to_string(),
+            color_mauve: "#cba6f7".to_string(),
+            color_red: "#f38ba8".to_string(),
+            color_maroon: "#eba0ac".to_string(),
+            color_peach: "#fab387".to_string(),
+            color_yellow: "#f9e2af".to_string(),
+            color_green: "#a6e3a1".to_string(),
+            color_teal: "#94e2d5".to_string(),
+            color_sky: "#89dceb".to_string(),
+            color_sapphire: "#74c7ec".to_string(),
+            color_blue: "#89b4fa".to_string(),
+            color_lavender: "#b4befe".to_string(),
+            color_text: "#cdd6f4".to_string(),
+            color_subtext1: "#bac2de".to_string(),
+            color_subtext0: "#a6adc8".to_string(),
+            color_overlay2: "#9399b2".to_string(),
+            color_overlay1: "#7f849c".to_string(),
+            color_overlay0: "#6c7086".to_string(),
+            color_surface2: "#585b70".to_string(),
+            color_surface1: "#45475a".to_string(),
+            color_surface0: "#313244".to_string(),
+            color_base: "#1e1e2e".to_string(),
+            color_mantle: "#181825".to_string(),
+            color_crust: "#11111b".to_string(),
         }
     }
 }
@@ -40,7 +95,7 @@ impl eframe::App for CatEditorApp {
             return;
         }
 
-        theme::apply_catppuccin(ctx);
+        theme::apply_theme(ctx, self);
 
         ctx.input(|i| {
             if self.mode == Mode::Insert {

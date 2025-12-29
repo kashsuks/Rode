@@ -1,35 +1,35 @@
 use eframe::egui;
 
-pub fn apply_catppuccin(ctx: &egui::Context) {
-    let rosewater = c("#f5e0dc");
-    let flamingo = c("#f2cdcd");
-    let pink = c("#f5c2e7");
-    let mauve = c("#cba6f7");
-    let red = c("#f38ba8");
-    let maroon = c("#eba0ac");
-    let peach = c("#fab387");
-    let yellow = c("#f9e2af");
-    let green = c("#a6e3a1");
-    let teal = c("#94e2d5");
-    let sky = c("#89dceb");
-    let sapphire = c("#74c7ec");
-    let blue = c("#89b4fa");
-    let lavender = c("#b4befe");
+pub fn apply_theme(ctx: &egui::Context, app: &crate::app::CatEditorApp) {
+    let rosewater = c(&app.color_rosewater);
+    let flamingo = c(&app.color_flamingo);
+    let pink = c(&app.color_pink);
+    let mauve = c(&app.color_mauve);
+    let red = c(&app.color_red);
+    let maroon = c(&app.color_maroon);
+    let peach = c(&app.color_peach);
+    let yellow = c(&app.color_yellow);
+    let green = c(&app.color_green);
+    let teal = c(&app.color_teal);
+    let sky = c(&app.color_sky);
+    let sapphire = c(&app.color_sapphire);
+    let blue = c(&app.color_blue);
+    let lavender = c(&app.color_lavender);
 
-    let text = c("#cdd6f4");
-    let subtext1 = c("#bac2de");
-    let subtext0 = c("#a6adc8");
-    let overlay2 = c("#9399b2");
-    let overlay1 = c("#7f849c");
-    let overlay0 = c("#6c7086");
+    let text = c(&app.color_text);
+    let subtext1 = c(&app.color_subtext1);
+    let subtext0 = c(&app.color_subtext0);
+    let overlay2 = c(&app.color_overlay2);
+    let overlay1 = c(&app.color_overlay1);
+    let overlay0 = c(&app.color_overlay0);
 
-    let surface2 = c("#585b70");
-    let surface1 = c("#45475a");
-    let surface0 = c("#313244");
+    let surface2 = c(&app.color_surface2);
+    let surface1 = c(&app.color_surface1);
+    let surface0 = c(&app.color_surface0);
 
-    let base = c("#1e1e2e");
-    let mantle = c("#181825");
-    let crust = c("#11111b");
+    let base = c(&app.color_base);
+    let mantle = c(&app.color_mantle);
+    let crust = c(&app.color_crust);
 
     let mut visuals = egui::Visuals::dark();
 
@@ -86,8 +86,15 @@ fn c(hex: &str) -> egui::Color32 {
 
 fn parse_hex_rgb(hex: &str) -> (u8, u8, u8) {
     let h = hex.trim().trim_start_matches('#');
-    let r = u8::from_str_radix(&h[0..2], 16).unwrap_or(0);
-    let g = u8::from_str_radix(&h[2..4], 16).unwrap_or(0);
-    let b = u8::from_str_radix(&h[4..6], 16).unwrap_or(0);
+    
+    // Pad with zeros if incomplete
+    let mut padded = h.to_string();
+    while padded.len() < 6 {
+        padded.push('0');
+    }
+    
+    let r = u8::from_str_radix(&padded.get(0..2).unwrap_or("00"), 16).unwrap_or(0);
+    let g = u8::from_str_radix(&padded.get(2..4).unwrap_or("00"), 16).unwrap_or(0);
+    let b = u8::from_str_radix(&padded.get(4..6).unwrap_or("00"), 16).unwrap_or(0);
     (r, g, b)
 }
