@@ -15,7 +15,7 @@ pub struct CatEditorApp {
     pub command_buffer: String,
     pub should_quit: bool,
     pub current_file: Option<String>,
-    pub cursor_pos: usize,            // character index (CCursor index)
+    pub cursor_pos: usize,
     pub pending_motion: Option<char>,
 
     //theme stuff
@@ -171,17 +171,25 @@ impl eframe::App for CatEditorApp {
                         .interactive(true);
 
                     let available = ui.available_size();
-                    let mut output = ui.allocate_ui(available, |ui| text_edit.show(ui)).inner;
+                    let output = ui.allocate_ui(available, |ui| text_edit.show(ui)).inner;
+
+                    // Check if something else (like a menu input) has focus
+                    let something_else_has_focus = !output.response.has_focus() && 
+                        ctx.memory(|mem| mem.focused().is_some());
 
                     match self.mode {
                         Mode::Insert => {
-                            output.response.request_focus();
+                            if !something_else_has_focus {
+                                output.response.request_focus();
+                            }
                             if let Some(cursor) = output.cursor_range {
                                 self.cursor_pos = cursor.primary.ccursor.index;
                             }
                         }
                         Mode::Normal => {
-                            output.response.request_focus();
+                            if !something_else_has_focus {
+                                output.response.request_focus();
+                            }
 
                             let mut state = output.state;
                             let ccursor = egui::text::CCursor::new(self.cursor_pos);

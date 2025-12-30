@@ -90,36 +90,65 @@ fn show_search_menu(ui: &mut egui::Ui, _app: &mut CatEditorApp) {
 
 fn show_theme_menu(ui: &mut egui::Ui, app: &mut CatEditorApp) {
     ui.menu_button("Theme", |ui| {
-        ui.label("colors:");
-        ui.horizontal(|ui| { ui.label("Rosewater:"); ui.text_edit_singleline(&mut app.color_rosewater);});
-        ui.horizontal(|ui| { ui.label("Flamingo:"); ui.text_edit_singleline(&mut app.color_flamingo);});
-        ui.horizontal(|ui| { ui.label("Pink:"); ui.text_edit_singleline(&mut app.color_pink);});
-        ui.horizontal(|ui| { ui.label("Mauve:"); ui.text_edit_singleline(&mut app.color_mauve);});
-        ui.horizontal(|ui| { ui.label("Red:"); ui.text_edit_singleline(&mut app.color_red);});
-        ui.horizontal(|ui| { ui.label("Maroon:"); ui.text_edit_singleline(&mut app.color_maroon);});
-        ui.horizontal(|ui| { ui.label("Peach:"); ui.text_edit_singleline(&mut app.color_peach); });
-        ui.horizontal(|ui| { ui.label("Yellow:"); ui.text_edit_singleline(&mut app.color_yellow); });
-        ui.horizontal(|ui| { ui.label("Green:"); ui.text_edit_singleline(&mut app.color_green); });
-        ui.horizontal(|ui| { ui.label("Teal:"); ui.text_edit_singleline(&mut app.color_teal); });
-        ui.horizontal(|ui| { ui.label("Sky:"); ui.text_edit_singleline(&mut app.color_sky); });
-        ui.horizontal(|ui| { ui.label("Sapphire:"); ui.text_edit_singleline(&mut app.color_sapphire);});
-        ui.horizontal(|ui| { ui.label("Blue:"); ui.text_edit_singleline(&mut app.color_blue);});
-        ui.horizontal(|ui| { ui.label("Lavender:"); ui.text_edit_singleline(&mut app.color_lavender);});
-        ui.separator();
-        ui.label("text:");
-        ui.horizontal(|ui| { ui.label("Text:"); ui.text_edit_singleline(&mut app.color_text); });
-        ui.horizontal(|ui| { ui.label("Subtext1:"); ui.text_edit_singleline(&mut app.color_subtext1); });
-        ui.horizontal(|ui| { ui.label("Subtext0:"); ui.text_edit_singleline(&mut app.color_subtext0); });
-        ui.horizontal(|ui| { ui.label("Overlay2:"); ui.text_edit_singleline(&mut app.color_overlay2); });
-        ui.horizontal(|ui| { ui.label("Overlay1:"); ui.text_edit_singleline(&mut app.color_overlay1); });
-        ui.horizontal(|ui| { ui.label("Overlay0:"); ui.text_edit_singleline(&mut app.color_overlay0); });
-        ui.separator();
-        ui.label("background:");
-        ui.horizontal(|ui| { ui.label("Surface2:"); ui.text_edit_singleline(&mut app.color_surface2); });
-        ui.horizontal(|ui| { ui.label("Surface1:"); ui.text_edit_singleline(&mut app.color_surface1); });
-        ui.horizontal(|ui| { ui.label("Surface0:"); ui.text_edit_singleline(&mut app.color_surface0); });
-        ui.horizontal(|ui| { ui.label("Base:"); ui.text_edit_singleline(&mut app.color_base); });
-        ui.horizontal(|ui| { ui.label("Mantle:"); ui.text_edit_singleline(&mut app.color_mantle); });
-        ui.horizontal(|ui| { ui.label("Crust:"); ui.text_edit_singleline(&mut app.color_crust); });
+        ui.set_min_width(300.0);
+        
+        egui::ScrollArea::vertical()
+            .max_height(500.0)
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new("Colors").strong());
+                ui.separator();
+                
+                color_input(ui, "Rosewater", &mut app.color_rosewater);
+                color_input(ui, "Flamingo", &mut app.color_flamingo);
+                color_input(ui, "Pink", &mut app.color_pink);
+                color_input(ui, "Mauve", &mut app.color_mauve);
+                color_input(ui, "Red", &mut app.color_red);
+                color_input(ui, "Maroon", &mut app.color_maroon);
+                color_input(ui, "Peach", &mut app.color_peach);
+                color_input(ui, "Yellow", &mut app.color_yellow);
+                color_input(ui, "Green", &mut app.color_green);
+                color_input(ui, "Teal", &mut app.color_teal);
+                color_input(ui, "Sky", &mut app.color_sky);
+                color_input(ui, "Sapphire", &mut app.color_sapphire);
+                color_input(ui, "Blue", &mut app.color_blue);
+                color_input(ui, "Lavender", &mut app.color_lavender);
+                
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new("Text").strong());
+                ui.separator();
+                
+                color_input(ui, "Text", &mut app.color_text);
+                color_input(ui, "Subtext1", &mut app.color_subtext1);
+                color_input(ui, "Subtext0", &mut app.color_subtext0);
+                color_input(ui, "Overlay2", &mut app.color_overlay2);
+                color_input(ui, "Overlay1", &mut app.color_overlay1);
+                color_input(ui, "Overlay0", &mut app.color_overlay0);
+                
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new("Background").strong());
+                ui.separator();
+                
+                color_input(ui, "Surface2", &mut app.color_surface2);
+                color_input(ui, "Surface1", &mut app.color_surface1);
+                color_input(ui, "Surface0", &mut app.color_surface0);
+                color_input(ui, "Base", &mut app.color_base);
+                color_input(ui, "Mantle", &mut app.color_mantle);
+                color_input(ui, "Crust", &mut app.color_crust);
+            });
+    });
+}
+
+fn color_input(ui: &mut egui::Ui, label: &str, value: &mut String) {
+    ui.horizontal(|ui| {
+        ui.label(format!("{}:", label));
+        let response = ui.add(
+            egui::TextEdit::singleline(value)
+                .desired_width(100.0)
+                .hint_text("#rrggbb")
+        );
+
+        if response.has_focus() {
+            response.request_focus();
+        }
     });
 }
