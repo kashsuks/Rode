@@ -1,35 +1,37 @@
 use eframe::egui;
 
 pub fn apply_theme(ctx: &egui::Context, app: &crate::app::CatEditorApp) {
-    let rosewater = c(&app.color_rosewater);
-    let flamingo = c(&app.color_flamingo);
-    let pink = c(&app.color_pink);
-    let mauve = c(&app.color_mauve);
-    let red = c(&app.color_red);
-    let maroon = c(&app.color_maroon);
-    let peach = c(&app.color_peach);
-    let yellow = c(&app.color_yellow);
-    let green = c(&app.color_green);
-    let teal = c(&app.color_teal);
-    let sky = c(&app.color_sky);
-    let sapphire = c(&app.color_sapphire);
-    let blue = c(&app.color_blue);
-    let lavender = c(&app.color_lavender);
+    let theme = &app.theme;
+    
+    let rosewater = c(&theme.rosewater);
+    let flamingo = c(&theme.flamingo);
+    let _pink = c(&theme.pink);
+    let _mauve = c(&theme.mauve);
+    let red = c(&theme.red);
+    let _maroon = c(&theme.maroon);
+    let _peach = c(&theme.peach);
+    let yellow = c(&theme.yellow);
+    let _green = c(&theme.green);
+    let _teal = c(&theme.teal);
+    let _sky = c(&theme.sky);
+    let _sapphire = c(&theme.sapphire);
+    let blue = c(&theme.blue);
+    let lavender = c(&theme.lavender);
 
-    let text = c(&app.color_text);
-    let subtext1 = c(&app.color_subtext1);
-    let subtext0 = c(&app.color_subtext0);
-    let overlay2 = c(&app.color_overlay2);
-    let overlay1 = c(&app.color_overlay1);
-    let overlay0 = c(&app.color_overlay0);
+    let text = c(&theme.text);
+    let subtext1 = c(&theme.subtext1);
+    let _subtext0 = c(&theme.subtext0);
+    let _overlay2 = c(&theme.overlay2);
+    let overlay1 = c(&theme.overlay1);
+    let _overlay0 = c(&theme.overlay0);
 
-    let surface2 = c(&app.color_surface2);
-    let surface1 = c(&app.color_surface1);
-    let surface0 = c(&app.color_surface0);
+    let surface2 = c(&theme.surface2);
+    let surface1 = c(&theme.surface1);
+    let surface0 = c(&theme.surface0);
 
-    let base = c(&app.color_base);
-    let mantle = c(&app.color_mantle);
-    let crust = c(&app.color_crust);
+    let base = c(&theme.base);
+    let _mantle = c(&theme.mantle);
+    let _crust = c(&theme.crust);
 
     let mut visuals = egui::Visuals::dark();
 
@@ -87,7 +89,7 @@ fn c(hex: &str) -> egui::Color32 {
 fn parse_hex_rgb(hex: &str) -> (u8, u8, u8) {
     let h = hex.trim().trim_start_matches('#');
     
-    // Pad with zeros if incomplete
+    //pad with some 0 if its incomplete
     let mut padded = h.to_string();
     while padded.len() < 6 {
         padded.push('0');

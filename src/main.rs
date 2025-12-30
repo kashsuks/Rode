@@ -4,6 +4,7 @@ mod menu;
 mod file_ops;
 mod vim_motions;
 mod theme;
+mod theme_manager;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
