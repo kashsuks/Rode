@@ -1,7 +1,7 @@
 use eframe::egui;
 use crate::menu;
 use crate::theme;
-use crate::theme_manager::{ThemeColors, load_theme, get_theme_modified_time};
+use crate::theme_manager::{ThemeColors, load_theme};
 
 #[derive(PartialEq)]
 pub enum Mode {
@@ -21,7 +21,7 @@ pub struct CatEditorApp {
 
     //theme stuff
     pub theme: ThemeColors,
-    pub last_theme_check: std::time::SystemTime,
+    pub theme_menu_open: bool,
 }
 
 impl Default for CatEditorApp {
@@ -35,8 +35,8 @@ impl Default for CatEditorApp {
             current_file: None,
             cursor_pos: 0,
             pending_motion: None,
-            last_theme_check: std::time::SystemTime::now(),
             theme,
+            theme_menu_open: false,
         }
     }
 }
@@ -48,17 +48,18 @@ impl eframe::App for CatEditorApp {
             return;
         }
 
-        // Check for theme file changes every second
-        if let Ok(elapsed) = self.last_theme_check.elapsed() {
-            if elapsed.as_secs() >= 1 {
-                if let Some(modified) = get_theme_modified_time() {
-                    if modified > self.last_theme_check {
-                        self.theme = load_theme();
-                    }
-                }
-                self.last_theme_check = std::time::SystemTime::now();
+        ctx.input(|i| {
+            let modifier_pressed = if cfg!(target_os = "macos") {
+                i.modifiers.command
+            } else {
+                i.modifiers.ctrl
+            };
+
+            if modifier_pressed && i.key_pressed(egui::Key::Comma) && i.key_pressed(egui::Key::A) {
+                println!("refresh");
+                self.theme = load_theme();
             }
-        }
+        });
 
         theme::apply_theme(ctx, self);
 

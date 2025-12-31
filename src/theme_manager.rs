@@ -71,6 +71,9 @@ impl ThemeColors {
             r#"# CatEditor Theme Configuration
 # Edit these hex color values to customize your theme
 # Changes will be applied automatically
+# 1. Edit colours in the Theme menu (auto-saved and applied)
+# 2. Force reload with Cmd + , + A (Mac) or Ctrl + , + A (Windows/Linux)
+# 3. Restart the application
 
 [colors]
 rosewater = "{}"
@@ -190,9 +193,4 @@ pub fn save_theme(theme: &ThemeColors) -> Result<(), std::io::Error> {
     file.write_all(theme.to_toml().as_bytes())?;
     
     Ok(())
-}
-
-pub fn get_theme_modified_time() -> Option<std::time::SystemTime> {
-    let path = get_theme_path();
-    fs::metadata(path).ok()?.modified().ok()
 }

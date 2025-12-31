@@ -42,7 +42,7 @@ pub fn handle_normal_mode_input(app: &mut CatEditorApp, input: &egui::InputState
         if input.modifiers.shift {
             move_to_last_line(app);
         } else {
-            //handle gg in tex input below
+            //handle gg in text input below
         }
     }
 
