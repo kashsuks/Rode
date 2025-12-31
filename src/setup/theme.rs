@@ -1,6 +1,6 @@
 use eframe::egui;
 
-pub fn apply_theme(ctx: &egui::Context, app: &crate::app::CatEditorApp) {
+pub fn apply_theme(ctx: &egui::Context, app: &crate::setup::app::CatEditorApp) {
     let theme = &app.theme;
     
     let rosewater = c(&theme.rosewater);

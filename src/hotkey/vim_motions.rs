@@ -1,4 +1,4 @@
-use crate::app::CatEditorApp;
+use crate::setup::app::CatEditorApp;
 use eframe::egui;
 
 pub fn handle_normal_mode_input(app: &mut CatEditorApp, input: &egui::InputState) {

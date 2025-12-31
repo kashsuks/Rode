@@ -1,5 +1,5 @@
 use eframe::egui;
-use crate::app::CatEditorApp;
+use crate::setup::app::CatEditorApp;
 
 pub fn show_menu_bar(ctx: &egui::Context, app: &mut CatEditorApp) {
     egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
@@ -139,7 +139,7 @@ fn show_theme_menu(ui: &mut egui::Ui, app: &mut CatEditorApp) {
             });
         
         if theme_changed {
-            let _ = crate::theme_manager::save_theme(&app.theme);
+            let _ = crate::config::theme_manager::save_theme(&app.theme);
         }
     });
 }
