@@ -1,15 +1,52 @@
 use eframe::egui;
 
+#[derive(Clone)]
+pub struct Command {
+    pub name: String,
+    pub description: String,
+}
+
 pub struct CommandPalette {
     pub open: bool,
     pub input: String,
+    commands: Vec<Command>,
+    filtered_commands: Vec<Command>,
 }
 
 impl Default for CommandPalette {
     fn default() -> Self {
+        let commands = vec![
+            Command {
+                name: "Theme".to_string(),
+                description: "Open theme settings".to_string(),
+            },
+            Command {
+                name: "Open File".to_string(),
+                description: "Open an existing file".to_string(),
+            },
+            Command {
+                name: "Save File".to_string(),
+                description: "Save the current file".to_string(),
+            },
+            Command {
+                name: "Quit".to_string(),
+                description: "Exit the editor".to_string(),
+            },
+            Command {
+                name: "New File".to_string(),
+                description: "Create a new file".to_string(),
+            },
+            Command {
+                name: "Save As".to_string(),
+                description: "Save the current file with a new name".to_string(),
+            },
+        ];
+
         Self {
             open: false,
             input: String::new(),
+            filtered_commands: Vec::new(),
+            commands,
         }
     }
 }
@@ -19,6 +56,23 @@ impl CommandPalette {
         self.open = !self.open;
         if self.open {
             self.input.clear();
+            self.filtered_commands.clear();
+        }
+    }
+
+    fn filter_commands(&mut self) {
+        let input_lower = self.input.to_lowercase();
+        
+        if input_lower.is_empty() {
+            self.filtered_commands.clear();
+        } else {
+            self.filtered_commands = self.commands
+                .iter()
+                .filter(|cmd| {
+                    cmd.name.to_lowercase().contains(&input_lower)
+                })
+                .cloned()
+                .collect();
         }
     }
 
@@ -60,6 +114,10 @@ impl CommandPalette {
                     response.request_focus();
                 }
 
+                if response.changed() {
+                    self.filter_commands();
+                }
+
                 if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     self.open = false;
                     self.input.clear();
@@ -75,15 +133,37 @@ impl CommandPalette {
                         egui::ScrollArea::vertical()
                             .max_height(300.0)
                             .show(ui, |ui| {
-                                if self.input.is_empty() {
-                                    ui.label(
-                                        egui::RichText::new("Start typing to search for commands...")
-                                            .color(ui.visuals().weak_text_color())
-                                    );
-                                } else {
-                                    ui.label(format!("Results for: '{}'", self.input));
-                                    ui.separator();
-                                    ui.label("No commands yet");
+                                if !self.filtered_commands.is_empty() {
+                                    for cmd in &self.filtered_commands {
+                                        let response = ui.add_sized(
+                                            egui::vec2(ui.available_width(), 50.0),
+                                            egui::Button::new("")
+                                                .frame(false)
+                                        );
+
+                                        let rect = response.rect;
+                                        let painter = ui.painter();
+
+                                        painter.text(
+                                            egui::pos2(rect.left() + 10.0, rect.top() + 12.0),
+                                            egui::Align2::LEFT_TOP,
+                                            &cmd.name,
+                                            egui::FontId::proportional(16.0),
+                                            if response.hovered() {
+                                                ui.visuals().strong_text_color()
+                                            } else {
+                                                ui.visuals().text_color()
+                                            }
+                                        );
+
+                                        painter.text(
+                                            egui::pos2(rect.left() + 10.0, rect.top() + 30.0),
+                                            egui::Align2::LEFT_TOP,
+                                            &cmd.description,
+                                            egui::FontId::proportional(12.0),
+                                            ui.visuals().weak_text_color()
+                                        );
+                                    }
                                 }
                             });
                     });
