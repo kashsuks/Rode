@@ -5,6 +5,7 @@ mod file_ops;
 mod vim_motions;
 mod theme;
 mod theme_manager;
+mod command_palette;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
