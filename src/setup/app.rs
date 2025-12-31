@@ -1,7 +1,7 @@
 use eframe::egui;
-use crate::menu;
-use crate::theme;
-use crate::theme_manager::{ThemeColors, load_theme};
+use crate::setup::menu;
+use crate::setup::theme;
+use crate::config::theme_manager::{ThemeColors, load_theme};
 use crate::command_palette::CommandPalette;
 
 #[derive(PartialEq)]
@@ -83,7 +83,7 @@ impl eframe::App for CatEditorApp {
                     }
                 }
             } else if self.mode == Mode::Normal {
-                crate::vim_motions::handle_normal_mode_input(self, i);
+                crate::hotkey::vim_motions::handle_normal_mode_input(self, i);
 
                 if i.key_pressed(egui::Key::I) {
                     self.mode = Mode::Insert;

@@ -1,10 +1,8 @@
 use eframe::egui;
-mod app;
-mod menu;
-mod file_ops;
-mod vim_motions;
-mod theme;
-mod theme_manager;
+
+mod config;
+mod hotkey;
+mod setup;
 mod command_palette;
 
 fn main() -> eframe::Result<()> {
@@ -19,6 +17,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "CatEditor",
         options,
-        Box::new(|_cc| Ok(Box::new(app::CatEditorApp::default()))),
+        Box::new(|_cc| Ok(Box::new(setup::app::CatEditorApp::default()))),
     )
 }
