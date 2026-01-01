@@ -20,6 +20,7 @@ pub struct CatEditorApp {
     pub current_file: Option<String>,
     pub cursor_pos: usize,
     pub pending_motion: Option<char>,
+    pub saved_column: Option<usize>,
 
     pub theme: ThemeColors,
     pub theme_menu_open: bool,
@@ -39,6 +40,7 @@ impl Default for CatEditorApp {
             current_file: None,
             cursor_pos: 0,
             pending_motion: None,
+            saved_column: None,
             theme,
             theme_menu_open: false,
             command_palette: CommandPalette::default(),
