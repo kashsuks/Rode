@@ -3,6 +3,7 @@ use crate::setup::menu;
 use crate::setup::theme;
 use crate::config::theme_manager::{ThemeColors, load_theme};
 use crate::command_palette::CommandPalette;
+use crate::hotkey::find_replace::FindReplace;
 
 #[derive(PartialEq)]
 pub enum Mode {
@@ -20,12 +21,11 @@ pub struct CatEditorApp {
     pub cursor_pos: usize,
     pub pending_motion: Option<char>,
 
-    //theme stuff
     pub theme: ThemeColors,
     pub theme_menu_open: bool,
     
-    //command palette
     pub command_palette: CommandPalette,
+    pub find_replace: FindReplace,
 }
 
 impl Default for CatEditorApp {
@@ -42,6 +42,7 @@ impl Default for CatEditorApp {
             theme,
             theme_menu_open: false,
             command_palette: CommandPalette::default(),
+            find_replace: FindReplace::default(),
         }
     }
 }
@@ -64,9 +65,12 @@ impl eframe::App for CatEditorApp {
                 if i.modifiers.shift {
                     self.theme = load_theme();
                 } else {
-                    // println!("command palette toggled");
                     self.command_palette.toggle();
                 }
+            }
+
+            if modifier_pressed && i.key_pressed(egui::Key::F) {
+                self.find_replace.toggle();
             }
         });
 
@@ -103,8 +107,8 @@ impl eframe::App for CatEditorApp {
 
         menu::show_menu_bar(ctx, self);
 
-        // show command palette
         self.command_palette.show(ctx);
+        self.find_replace.show(ctx, &mut self.text);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::TopBottomPanel::bottom("status_bar").show_inside(ui, |ui| {
@@ -151,7 +155,6 @@ impl eframe::App for CatEditorApp {
                     let available = ui.available_size();
                     let output = ui.allocate_ui(available, |ui| text_edit.show(ui)).inner;
 
-                    // Check if something else (like a menu input) has focus
                     let something_else_has_focus = !output.response.has_focus() && 
                         ctx.memory(|mem| mem.focused().is_some());
 
@@ -174,7 +177,6 @@ impl eframe::App for CatEditorApp {
                             state.cursor.set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
                             state.store(ctx, output.response.id);
 
-                            // undo any buffer edits that occurred from typed keys this frame
                             if let Some(old) = old_text {
                                 if self.text != old {
                                     self.text = old;
@@ -182,7 +184,6 @@ impl eframe::App for CatEditorApp {
                             }
                         }
                         Mode::Command => {
-                            // output.response.surrender_focus();
                         }
                     }
                 });
