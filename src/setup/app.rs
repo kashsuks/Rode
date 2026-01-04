@@ -1,6 +1,7 @@
 use eframe::egui;
 use crate::setup::menu;
 use crate::setup::theme;
+use crate::setup::tab_manager::TabManager;
 use crate::config::theme_manager::{ThemeColors, load_theme};
 use crate::command_palette::CommandPalette;
 use crate::hotkey::find_replace::FindReplace;
@@ -29,6 +30,8 @@ pub struct CatEditorApp {
     pub command_palette: CommandPalette,
     pub find_replace: FindReplace,
     pub command_input: CommandInput,
+
+    pub tab_manager: TabManager,
 }
 
 impl Default for CatEditorApp {
@@ -48,6 +51,7 @@ impl Default for CatEditorApp {
             command_palette: CommandPalette::default(),
             find_replace: FindReplace::default(),
             command_input: CommandInput::default(),
+            tab_manager: TabManager::default(),
         }
     }
 }
@@ -59,12 +63,22 @@ impl eframe::App for CatEditorApp {
             return;
         }
 
+        self.sync_to_tab();
+
         ctx.input(|i| {
             let modifier_pressed = if cfg!(target_os = "macos") {
                 i.modifiers.command
             } else {
                 i.modifiers.ctrl
             };
+
+            if modifier_pressed && i.key_pressed(egui::Key::T) {
+                self.tab_manager.new_tab();
+            }
+
+            if modifier_pressed && i.key_pressed(egui::Key::W) {
+                self.tab_manager.close_active_tab();
+            }
 
             if modifier_pressed && i.key_pressed(egui::Key::Comma) {
                 if i.modifiers.shift {
@@ -78,6 +92,8 @@ impl eframe::App for CatEditorApp {
                 self.find_replace.toggle();
             }
         });
+
+        self.sync_from_tab();
 
         theme::apply_theme(ctx, self);
 
@@ -102,18 +118,12 @@ impl eframe::App for CatEditorApp {
         });
 
         menu::show_menu_bar(ctx, self);
-        
-        // handle command palette and execute selected commands
+
         if let Some(command) = self.command_palette.show(ctx) {
             self.execute_palette_command(ctx, &command);
         }
-        
-        self.find_replace.show(ctx, &mut self.text, &mut self.cursor_pos);
 
-        if let Some(cmd) = self.command_input.show(ctx) {
-            self.command_buffer = cmd;
-            self.execute_command(ctx);
-        }
+        self.find_replace.show(ctx, &mut self.text, &mut self.cursor_pos);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::TopBottomPanel::bottom("status_bar").show_inside(ui, |ui| {
@@ -254,21 +264,41 @@ impl eframe::App for CatEditorApp {
                     });
                 });
         });
+
+        //sync back to the tab after editing
+        self.sync_to_tab();
     }
 }
 
 impl CatEditorApp {
+    fn sync_from_tab(&mut self) {
+        let tab = self.tab_manager.get_active_tab();
+        self.text = tab.text.clone();
+        self.current_file = tab.file_path.clone();
+        self.cursor_pos = tab.cursor_pos;
+        self.saved_column = tab.saved_column;
+    }
+
+    fn sync_to_tab(&mut self) {
+        let tab = self.tab_manager.get_active_tab_mut();
+        tab.text = self.text.clone();
+        tab.file_path = self.current_file.clone();
+        tab.cursor_pos = self.cursor_pos;
+        tab.saved_column = self.saved_column;
+    }
+
     fn execute_palette_command(&mut self, ctx: &egui::Context, command: &str) {
         match command {
             "Theme" => {
-                // The theme menu is already shown in menu.rs, so we don't need to do anything special
-                // User can access it via the menu bar
+                // the theme menu is already shown in menu.rs, so we don't need to do anything special
+                // user can access it via the menu bar
             }
             "Open File" => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
                     if let Ok(content) = std::fs::read_to_string(&path) {
                         self.text = content;
                         self.current_file = Some(path.display().to_string());
+                        self.sync_to_tab();
                     }
                 }
             }
@@ -278,19 +308,20 @@ impl CatEditorApp {
                 } else if let Some(path) = rfd::FileDialog::new().save_file() {
                     let _ = std::fs::write(&path, &self.text);
                     self.current_file = Some(path.display().to_string());
+                    self.sync_to_tab();
                 }
             }
             "Quit" => {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             "New File" => {
-                self.text.clear();
-                self.current_file = None;
+                self.tab_manager.new_tab();
             }
             "Save As" => {
                 if let Some(path) = rfd::FileDialog::new().save_file() {
                     let _ = std::fs::write(&path, &self.text);
                     self.current_file = Some(path.display().to_string());
+                    self.sync_to_tab();
                 }
             }
             _ => {}
@@ -307,6 +338,7 @@ impl CatEditorApp {
                     let _ = std::fs::write(&path, &self.text);
                     self.current_file = Some(path.display().to_string());
                 }
+                self.sync_to_tab();
             }
             "wq" => {
                 if let Some(path) = &self.current_file {
