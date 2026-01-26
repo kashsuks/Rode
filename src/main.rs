@@ -7,6 +7,7 @@ mod setup;
 mod command_palette;
 mod fuzzy_finder;
 mod settings;
+mod file_tree;
 
 fn main() -> eframe::Result<()> {
     //get the args

@@ -35,7 +35,6 @@ impl Settings {
         egui::Area::new("settings_overlay".into())
             .fixed_pos(egui::pos2(0.0, 0.0))
             .order(egui::Order::Foreground)
-            .interactable(false)
             .show(ctx, |ui| {
                 let screen_rect = ctx.screen_rect();
                 ui.allocate_space(screen_rect.size());

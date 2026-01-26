@@ -7,6 +7,7 @@ use crate::hotkey::find_replace::FindReplace;
 use crate::hotkey::command_input::CommandInput;
 use crate::fuzzy_finder::FuzzyFinder;
 use crate::settings::Settings;
+use crate::file_tree::FileTree;
 use std::path::PathBuf;
 
 #[derive(PartialEq)]
@@ -37,6 +38,7 @@ pub struct CatEditorApp {
     pub command_input: CommandInput,
     pub fuzzy_finder: FuzzyFinder,
     pub settings: Settings,
+    pub file_tree: FileTree,
 }
 
 impl Default for CatEditorApp {
@@ -61,6 +63,7 @@ impl Default for CatEditorApp {
             command_input: CommandInput::default(),
             fuzzy_finder: FuzzyFinder::default(),
             settings: Settings::default(),
+            file_tree: FileTree::default(),
         }
     }
 }
@@ -91,11 +94,15 @@ impl eframe::App for CatEditorApp {
                 self.find_replace.toggle();
             }
 
-            // Cmd+K / Ctrl+K to open folder
+            if modifier_pressed && i.key_pressed(egui::Key::B) {
+                self.file_tree.toggle();
+            }
+
             if modifier_pressed && i.key_pressed(egui::Key::K) {
                 if let Some(path) = rfd::FileDialog::new().pick_folder() {
                     self.current_folder = Some(path.clone());
-                    self.fuzzy_finder.set_folder(path);
+                    self.fuzzy_finder.set_folder(path.clone());
+                    self.file_tree.set_root(path);
                 }
             }
         });
@@ -149,12 +156,17 @@ impl eframe::App for CatEditorApp {
 
         menu::show_menu_bar(ctx, self);
         
-        // Show settings window (need to temporarily take it out to avoid double borrow)
+        if let Some(file_path) = self.file_tree.show(ctx) {
+            if let Ok(content) = std::fs::read_to_string(&file_path) {
+                self.text = content;
+                self.current_file = Some(file_path.display().to_string());
+            }
+        }
+        
         let mut settings = std::mem::take(&mut self.settings);
         settings.show(ctx, self);
         self.settings = settings;
         
-        // handle command palette and execute selected commands
         if let Some(command) = self.command_palette.show(ctx) {
             self.execute_palette_command(ctx, &command);
         }
