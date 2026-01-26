@@ -8,6 +8,7 @@ use crate::hotkey::command_input::CommandInput;
 use crate::fuzzy_finder::FuzzyFinder;
 use crate::settings::Settings;
 use crate::file_tree::FileTree;
+use crate::terminal::Terminal;
 use std::path::PathBuf;
 
 #[derive(PartialEq)]
@@ -39,6 +40,7 @@ pub struct CatEditorApp {
     pub fuzzy_finder: FuzzyFinder,
     pub settings: Settings,
     pub file_tree: FileTree,
+    pub terminal: Terminal,
 }
 
 impl Default for CatEditorApp {
@@ -64,6 +66,7 @@ impl Default for CatEditorApp {
             fuzzy_finder: FuzzyFinder::default(),
             settings: Settings::default(),
             file_tree: FileTree::default(),
+            terminal: Terminal::default(),
         }
     }
 }
@@ -96,6 +99,11 @@ impl eframe::App for CatEditorApp {
 
             if modifier_pressed && i.key_pressed(egui::Key::B) {
                 self.file_tree.toggle();
+            }
+
+            // Terminal toggle with Cmd/Ctrl + J
+            if modifier_pressed && i.key_pressed(egui::Key::J) {
+                self.terminal.toggle();
             }
 
             if modifier_pressed && i.key_pressed(egui::Key::K) {
@@ -184,6 +192,8 @@ impl eframe::App for CatEditorApp {
                 self.current_file = Some(file_path.display().to_string());
             }
         }
+
+        self.terminal.show(ctx);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::TopBottomPanel::bottom("status_bar").show_inside(ui, |ui| {

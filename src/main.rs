@@ -8,6 +8,7 @@ mod command_palette;
 mod fuzzy_finder;
 mod settings;
 mod file_tree;
+mod terminal;
 
 
 // Main function with frame settings

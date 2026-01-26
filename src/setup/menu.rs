@@ -7,6 +7,7 @@ pub fn show_menu_bar(ctx: &egui::Context, app: &mut CatEditorApp) {
             show_file_menu(ui, ctx, app);
             show_edit_menu(ui, app);
             show_search_menu(ui, app);
+            show_view_menu(ui, app);
             show_theme_menu(ui, app);
         });
     });
@@ -95,6 +96,24 @@ fn show_search_menu(ui: &mut egui::Ui, _app: &mut CatEditorApp) {
         }
         if ui.button("Replace").clicked() {
             println!("Replace clicked");
+            ui.close_menu();
+        }
+    });
+}
+
+fn show_view_menu(ui: &mut egui::Ui, app: &mut CatEditorApp) {
+    ui.menu_button("View", |ui| {
+        if ui.button("Toggle Terminal").clicked() {
+            app.terminal.toggle();
+            ui.close_menu();
+        }
+        if ui.button("Toggle File Tree").clicked() {
+            app.file_tree.toggle();
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui.button("Command Palette").clicked() {
+            app.command_palette.toggle();
             ui.close_menu();
         }
     });
