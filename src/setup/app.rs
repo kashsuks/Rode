@@ -355,27 +355,27 @@ impl CatEditorApp {
 
         fonts.font_data.insert(
             "FiraCode-Regular".to_owned(),
-            FontData::from_static(include_bytes!("../../assets/FiraCode-Regular.ttf")),
+            FontData::from_static(include_bytes!("../../assets/fonts/FiraCode-Regular.ttf")),
         );
 
         fonts.font_data.insert(
             "FiraCode-Bold".to_owned(),
-            FontData::from_static(include_bytes!("../../assets/FiraCode-Bold.ttf")), 
+            FontData::from_static(include_bytes!("../../assets/fonts/FiraCode-Bold.ttf")), 
         );
 
         fonts.font_data.insert(
             "FiraCode-Medium".to_owned(),
-            FontData::from_static(include_bytes!("../../assets/FiraCode-Medium.ttf")),
+            FontData::from_static(include_bytes!("../../assets/fonts/FiraCode-Medium.ttf")),
         );
 
         fonts.font_data.insert(
             "FiraCode-Light".to_owned(),
-            FontData::from_static(include_bytes!("../../assets/FiraCode-Light.ttf")),
+            FontData::from_static(include_bytes!("../../assets/fonts/FiraCode-Light.ttf")),
         );
 
         fonts.font_data.insert(
             "FiraCode-SemiBold".to_owned(),
-            FontData::from_static(include_bytes!("../../assets/FiraCode-SemiBold.ttf")),
+            FontData::from_static(include_bytes!("../../assets/fonts/FiraCode-SemiBold.ttf")),
         );
 
             // use firacode for the monospace font 

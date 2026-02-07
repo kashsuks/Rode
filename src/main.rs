@@ -8,6 +8,7 @@ mod fuzzy_finder;
 mod hotkey;
 mod setup;
 mod terminal;
+mod icon_theme;
 
 // Main function with frame settings
 //

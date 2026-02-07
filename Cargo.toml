@@ -14,3 +14,7 @@ categories = ["development-tools"]
 eframe = "0.29"
 egui = "0.29"
 rfd = "0.14"
+image = "0.24"
+resvg = "0.29"
+usvg = "0.29"
+tiny-skia = "0.11"

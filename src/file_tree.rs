@@ -71,36 +71,35 @@ impl FileNode {
     }
 }
 
-// Public structure that is used for the states specifically to the file tree tab box
+/// Public structure that is used for the states specifically to the file tree tab box
 pub struct FileTree {
-    pub visible: bool, // file tree is either visible or not
+    pub visible: bool, 
     pub root: Option<FileNode>,
     pub width: f32,
 }
 
-impl Default for FileTree {
-    // Default values for the file tree
+impl Default for FileTree {  
     fn default() -> Self {
         Self {
             visible: false, // file tree not visible by default (can be triggered by running
             // control + b)
             root: None,   // no root file when running app on startup
-            width: 250.0, // default width is 250.0px
+            width: 250.0, 
         }
     }
 }
 
 impl FileTree {
-    // Allows the user to toggle whether the file tree is open or not
+    /// Allows the user to toggle whether the file tree is open or not
     pub fn toggle(&mut self) {
         self.visible = !self.visible;
     }
 
-    // Set the root file of that specific directory so that files can be recursively searched
-    //
-    // # Arguments
-    //
-    // * `path` - Absolute path of the root file of the current directory
+    /// Set the root file of that specific directory so that files can be recursively searched
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Absolute path of the root file of the current directory
     pub fn set_root(&mut self, path: PathBuf) {
         let mut root = FileNode::new(path);
         root.is_expanded = true;
@@ -109,7 +108,7 @@ impl FileTree {
         self.visible = true;
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) -> Option<PathBuf> {
+    pub fn show(&mut self, ctx: &egui::Context, icon_manger: &mut crate::icon_manager::IconManager,) -> Option<PathBuf> {
         if !self.visible || self.root.is_none() {
             return None;
         }
@@ -128,7 +127,7 @@ impl FileTree {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         if let Some(root) = self.root.as_mut() {
-                            if let Some(file) = Self::show_node(ui, root, 0) {
+                            if let Some(file) = Self::show_node(ui, root, 0, icon_manger, ctx) {
                                 selected_file = Some(file);
                             }
                         }
@@ -138,7 +137,13 @@ impl FileTree {
         selected_file
     }
 
-    fn show_node(ui: &mut egui::Ui, node: &mut FileNode, depth: usize) -> Option<PathBuf> {
+    fn show_node(
+        ui: &mut egui::Ui, 
+        node: &mut FileNode, 
+        depth: usize,
+        icon_manager: &mut crate::icon_manager::IconManager,
+        ctx: &egui::Context,
+    ) -> Option<PathBuf> {
         let mut selected_file = None;
         let indent = depth as f32 * 16.0;
 
@@ -146,8 +151,11 @@ impl FileTree {
             ui.add_space(indent);
 
             if node.is_dir {
-                let icon = if node.is_expanded { "📂" } else { "📁" };
-                let response = ui.selectable_label(false, format!("{} {}", icon, node.name));
+                let icon_texture = icon_manager.get_folder_icon(ctx, &node.name, node.is_expanded);
+                ui.image(icon_texture).max_size(egui::vec2(16.0, 16.0));
+
+                let response = ui.selectable_label(false, &node.name);
+
 
                 if response.clicked() {
                     node.is_expanded = !node.is_expanded;
@@ -156,21 +164,10 @@ impl FileTree {
                     }
                 }
             } else {
-                let icon = match node.path.extension().and_then(|e| e.to_str()) {
-                    Some("rs") => "🦀",
-                    Some("toml") => "⚙️",
-                    Some("md") => "📝",
-                    Some("txt") => "📄",
-                    Some("json") => "📋",
-                    Some("yaml") | Some("yml") => "📋",
-                    Some("js") | Some("ts") => "📜",
-                    Some("py") => "🐍",
-                    Some("html") => "🌐",
-                    Some("css") => "🎨",
-                    _ => "📄",
-                };
+                let icon_texture = icon_manager.get_file_icon(ctx, &node.name);
+                ui.image(icon_texture).max_size(egui::vec2(16.0, 16.0));
 
-                let response = ui.selectable_label(false, format!("{} {}", icon, node.name));
+                let response = ui.selectable_label(false, &node.name);
 
                 if response.clicked() {
                     selected_file = Some(node.path.clone());
