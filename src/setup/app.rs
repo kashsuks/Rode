@@ -59,6 +59,8 @@ impl eframe::App for CatEditorApp {
             return;
         }
 
+        self.setup_fonts(ctx);
+
         // Handle global keyboard shortcuts (should work regardless of mode)
         ctx.input(|i| {
             let modifier_pressed = if cfg!(target_os = "macos") {
@@ -342,6 +344,53 @@ impl eframe::App for CatEditorApp {
 }
 
 impl CatEditorApp {
+    fn setup_fonts(&self, ctx: &egui::Context) {
+        use egui::FontFamily;
+        use egui::FontData;
+
+        if ctx.fonts(|f| f.families().get(&FontFamily::Monospace).is_none()) {
+            let mut fonts = egui::FontDefinitions::default();
+
+            fonts.font_data.insert(
+                "FiraCode-Regular".to_owned(),
+                FontData::from_static(include_bytes!("../../assets/FiraCode-Regular.ttf")),
+            );
+
+            fonts.font_data.insert(
+                "FiraCode-Bold".to_owned(),
+                FontData::from_static(include_bytes!("../../assets/FiraCode-Bold.ttf")), 
+            );
+
+            fonts.font_data.insert(
+                "FiraCode-Medium".to_owned(),
+                FontData::from_static(include_bytes!("../../assets/FiraCode-Medium.ttf")),
+            );
+
+            fonts.font_data.insert(
+                "FiraCode-Light".to_owned(),
+                FontData::from_static(include_bytes!("../../assets/FiraCode-Light.ttf")),
+            );
+
+            fonts.font_data.insert(
+                "FiraCode-SemiBold".to_owned(),
+                FontData::from_static(include_bytes!("../../assets/FiraCode-SemiBold.ttf")),
+            );
+
+            // use firacode for the monospace font 
+            fonts.families.get_mut(&FontFamily::Monospace).unwrap()
+                .insert(0, "FiraCode-Regular".to_owned());
+            fonts.families.get_mut(&FontFamily::Monospace).unwrap()
+                .push("FiraCode-Bold".to_owned());
+            fonts.families.get_mut(&FontFamily::Monospace).unwrap()
+                .push("FiraCode-Medium".to_owned());
+
+            fonts.families.get_mut(&FontFamily::Proportional).unwrap()
+                .insert(0, "FiraCode-Regular".to_owned());
+
+            ctx.set_fonts(fonts);
+        }
+    }
+
     fn execute_palette_command(&mut self, ctx: &egui::Context, command: &str) {
         match command {
             "Theme" => {
