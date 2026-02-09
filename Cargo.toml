@@ -1,6 +1,6 @@
 [package]
 name = "rode-editor"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Kashyap Sukshavas"]
 description = "A lightweight editor built with rust"
@@ -9,6 +9,7 @@ repository = "https://github.com/kashsuks/rode"
 readme = "README.md"
 keywords = ["editor", "terminal", "egui"]
 categories = ["development-tools"]
+include = ["src/**/*", "assets/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
 [dependencies]
 eframe = "0.29"
