@@ -52,7 +52,6 @@ impl Default for CatEditorApp {
             command_input: CommandInput::default(),
             fuzzy_finder: FuzzyFinder::default(),
             file_tree: FileTree::default(),
-            current_language: None,
             terminal: Terminal::default(),
             icon_manager: IconManager::new(),
             autocomplete: Autocomplete::default(),
@@ -307,7 +306,7 @@ impl eframe::App for CatEditorApp {
                                         text_draw_pos + egui::vec2(start_x, row_rect.min.y),
                                         egui::Align2::LEFT_TOP,
                                         token_text,
-                                        egui::TextStyle::Monospace::resolve(ui.style()),
+                                        egui::TextStyle::Monospace.resolve(ui.style()),
                                         color,
                                     );
 

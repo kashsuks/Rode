@@ -1,4 +1,3 @@
-use regex::Regex;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 
@@ -101,7 +100,7 @@ static TYPESCRIPT_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinitio
 });
 
 pub struct SyntaxHighlighter {
-    laguage_defs: HashMap<String, &'static LanguageDefinition>,
+    language_defs: HashMap<String, &'static LanguageDefinition>,
 }
 
 impl Default for SyntaxHighlighter {
@@ -118,7 +117,7 @@ impl SyntaxHighlighter {
         language_defs.insert("typescript".to_string(), &*TYPESCRIPT_DEF);
         language_defs.insert("python".to_string(), &*PYTHON_DEF);
 
-        Self { laguage_defs }
+        Self { language_defs }
     }
 
     pub fn detect_language(filename: &str) -> Option<String> {
@@ -151,12 +150,12 @@ impl SyntaxHighlighter {
             }
 
             if let Some((start, end)) = def.comment_multi {
-                if self.stars_with_str(&chars, i, start) {
+                if self.starts_with_str(&chars, i, start) {
                     let comment_start = i;
                     i += start.len();
 
                     while i < chars.len() {
-                        if self.stars_with_str(&chars, i, end) {
+                        if self.starts_with_str(&chars, i, end) {
                             i += end.len();
                             break;
                         }
@@ -172,7 +171,7 @@ impl SyntaxHighlighter {
             }
 
             if let Some(comment_market) = def.comment_single {
-                if self.stars_with_str(&chars, i, comment_market) {
+                if self.starts_with_str(&chars, i, comment_market) {
                     let comment_start = i;
                     while i < chars.len() && chars[i] != '\n' {
                         i += 1;
@@ -246,7 +245,7 @@ impl SyntaxHighlighter {
                     // we need to check whether its a function call
                     // followed by '('
                     let mut j = i;
-                    while j < chars.len() ** chars[j].is_whitespace() {
+                    while j < chars.len() && chars[j].is_whitespace() {
                         j += 1;
                     }
                     if j < chars.len() && chars[j] == '(' {
@@ -256,7 +255,7 @@ impl SyntaxHighlighter {
                     }
                 };
 
-                tokens.puhs(Token {
+                tokens.push(Token {
                     start: word_start,
                     end: i,
                     token_type,
