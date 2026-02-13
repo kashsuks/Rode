@@ -273,33 +273,44 @@ impl eframe::App for CatEditorApp {
 
                         let available = ui.available_size();
                         let output = ui.allocate_ui(available, |ui| text_edit.show(ui)).inner;
-                        
+                       
+                        let current_text_len = self.text.len();
+                        static mut LAST_TEXT_LEN: usize = 0;
+
                         // check for auto bracket closing
-                        if output.response.changed() {
-                            if let Some(cursor_range) = output.cursor_range {
-                                let cursor_pos = cursor_range.primary.ccursor.index;
+                        if output.response.changed() {              
+                            unsafe {
+                                // only autocomplete if text was added
+                                // not deleted
+                                if current_text_len > LAST_TEXT_LEN {
+                                    if let Some(cursor_range) = output.cursor_range {
+                                        let cursor_pos = cursor_range.primary.ccursor.index;
 
-                                if cursor_pos > 0 {
-                                    let chars: Vec<char> = self.text.chars().collect();
-                                    if cursor_pos <= chars.len() {
-                                        let prev_char = if cursor_pos > 0 { chars.get(cursor_pos - 1) } else { None };
+                                        // check if the user just typed
+                                        // an opening bracket
+                                        if cursor_pos > 0 {
+                                            let chars: Vec<char> = self.text.chars().collect();
+                                            if cursor_pos <= chars.len() {
+                                                let prev_char = if cursor_pos > 0 { chars.get(cursor_pos - 1) } else { None };
 
-                                        if let Some(&ch) = prev_char {
-                                            let closing = match ch {
-                                                '(' => Some(')'),
-                                                '{' => Some('}'),
-                                                '[' => Some(']'),
-                                                _ => None,
-                                            };
+                                                if let Some(&ch) = prev_char {
+                                                    let closing = match ch {
+                                                        '(' => Some(')'),
+                                                        '{' => Some('}'),
+                                                        '[' => Some(']'),
+                                                        _ => None,
+                                                    };
 
-                                            if let Some(close_char) = closing {
-                                                self.text.insert(cursor_pos, close_char);
-                                                // Note: the cursor stays naturally between the
-                                                // brackets
+                                                    if let Some(close_char) = closing {
+                                                        self.text.insert(cursor_pos, close_char);
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
+
+                                LAST_TEXT_LEN = current_text_len;
                             }
                         }
 
