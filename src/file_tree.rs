@@ -109,7 +109,7 @@ impl FileTree {
     }
 
     pub fn show(&mut self, ctx: &egui::Context, icon_manger: &mut crate::icon_manager::IconManager,) -> Option<PathBuf> {
-        if !self.visible || self.root.is_none() {
+        if !self.visible {
             return None;
         }
 
@@ -130,6 +130,10 @@ impl FileTree {
                             if let Some(file) = Self::show_node(ui, root, 0, icon_manger, ctx) {
                                 selected_file = Some(file);
                             }
+                        } else {
+                            ui.add_space(6.0);
+                            ui.label(egui::RichText::new("No folder opened").italics());
+                            ui.label(egui::RichText::new("Use Open Folder to start browsing files.").weak());
                         }
                     });
             });

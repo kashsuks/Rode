@@ -252,6 +252,12 @@ impl eframe::App for CatEditorApp {
                 self.leader_sequence.clear();
             }
 
+            let show_welcome = self.current_file.is_none() && self.text.trim().is_empty();
+            if show_welcome {
+                self.show_welcome_screen(ui);
+                return;
+            }
+
             egui::ScrollArea::vertical()
                 .id_salt("main_scroll_area")
                 .show(ui, |ui| {
@@ -627,22 +633,10 @@ impl CatEditorApp {
                 // User can access it via the menu bar
             }
             "Open File" => {
-                if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        self.text = content;
-                        self.current_file = Some(path.display().to_string());
-                        self.current_language = SyntaxHighlighter::detect_language(&path.display().to_string());
-                    }
-                }
+               self.open_file_dialog(); 
             }
             "Open Folder" => {
-                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                    self.current_folder = Some(path.clone());
-                    self.fuzzy_finder.set_folder(path.clone());
-                    self.file_tree.set_root(path.clone());
-                    self.terminal.set_directory(path);
-                }
-            }
+                self.open_folder_dialog();                       }
             "Save File" => {
                 if let Some(path) = &self.current_file {
                     let _ = std::fs::write(path, &self.text);
@@ -666,5 +660,63 @@ impl CatEditorApp {
             }
             _ => {}
         }
+    }
+
+    fn open_file_dialog(&mut self) {
+        if let Some(path) = rfd::FileDialog::new().pick_file() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                self.text = content;
+                self.current_file = Some(path.display().to_string());
+                self.current_language = SyntaxHighlighter::detect_language(&path.display().to_string());
+            }
+        }
+    }
+
+    fn open_folder_dialog(&mut self) {
+        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+            self.current_folder = Some(path.clone());
+            self.fuzzy_finder.set_folder(path.clone());
+            self.file_tree.set_root(path.clone());
+            self.terminal.set_directory(path);
+        }
+    }
+
+    fn show_welcome_screen(&mut self, ui: &mut egui::Ui) {
+        let command_label = if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" };
+
+        ui.vertical_centered(|ui| {
+            ui.add_space((ui.available_height() * 0.22).max(40.0));
+            ui.label(
+                egui::RichText::new("Rode")
+                    .size(56.0)
+                    .strong()
+                    .color(egui::Color32::from_rgb(170, 210, 255)),
+            );
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new("Fast, minimal editing.").weak());
+            ui.add_space(20.0);
+
+            if ui.add_sized([240.0, 34.0], egui::Button::new("Open File")).clicked() {
+                self.open_file_dialog();
+            }
+
+            if ui.add_sized([240.0, 34.0], egui::Button::new("Open Folder")).clicked() {
+                self.open_folder_dialog();
+            }
+
+            if ui.add_sized([240.0, 34.0], egui::Button::new("Command Palette")).clicked() {
+                self.command_palette.toggle();
+            }
+
+            ui.add_space(12.0);
+            ui.label(
+                egui::RichText::new(format!(
+                        "Shortcuts: {}+Shift+P (palette), {}+Shift+F (fuzzy finder)",
+                        command_label, command_label
+                ))
+                .small()
+                .weak(),
+            );
+        });
     }
 }
