@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check version and release status
+        id: check
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml)
+          echo "version=$version" >> $GITHUB_OUTPUT
+          
+          latest_release=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+            grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/' || echo "none")
+          
+          if [ "$latest_release" != "$version" ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset_suffix: linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset_suffix: windows-x86_64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            asset_suffix: macos-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare asset
+        shell: bash
+        run: |
+          binary_name=$(sed -n 's/^name = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+          cd target/${{ matrix.target }}/release
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp ${binary_name}.exe ../../${binary_name}-${{ matrix.asset_suffix }}
+          else
+            cp ${binary_name} ../../${binary_name}-${{ matrix.asset_suffix }}
+          fi
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/*-${{ matrix.asset_suffix }}
+          tag_name: v${{ needs.check-version.outputs.version }}
+          body: |
+            Release v${{ needs.check-version.outputs.version }}
+            Commit: ${{ github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-crate:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Publish to crates.io
+        run: |
+          cargo login ${{ secrets.CRATES_IO }}
+          cargo publish
+          rm -f ~/.cargo/credentials
