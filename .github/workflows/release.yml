@@ -31,9 +31,12 @@ jobs:
           else
             echo "should_release=false" >> $GITHUB_OUTPUT
           fi
+
   build-and-release:
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
+    permissions:
+      contents: write
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -69,6 +72,7 @@ jobs:
           else
             cp ${binary_name} ../../${binary_name}-${{ matrix.asset_suffix }}
           fi
+
       - name: Upload to release
         uses: softprops/action-gh-release@v1
         with:
@@ -92,5 +96,5 @@ jobs:
       - name: Publish to crates.io
         run: |
           cargo login ${{ secrets.CRATES_IO }}
-          cargo publish
+          cargo publish --alow-dirty
           rm -f ~/.cargo/credentials
