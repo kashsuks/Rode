@@ -34,8 +34,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0]) // default window size but can change
-            .with_title("CatEditor")
-            .with_fullscreen(true),
+            .with_title("CatEditor"),
         ..Default::default()
     };
 
