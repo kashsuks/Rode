@@ -149,7 +149,7 @@ return {{
 
             if let Some((key, value)) = line.split_once('=') {
                 let key = key.trim();
-                let value = value 
+                let value = value
                     .trim()
                     .trim_end_matches(',')
                     .trim_matches('"')
@@ -198,7 +198,7 @@ pub fn get_config_dir() -> PathBuf {
 }
 
 pub fn get_theme_path() -> PathBuf {
-   get_config_dir().join("theme.lua") 
+    get_config_dir().join("theme.lua")
 }
 
 pub fn load_theme() -> ThemeColors {

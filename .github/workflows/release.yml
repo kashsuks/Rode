@@ -98,3 +98,79 @@ jobs:
           cargo login ${{ secrets.CRATES_IO }}
           cargo publish --allow-dirty
           rm -f ~/.cargo/credentials
+
+  update-aur:
+    needs: [check-version, build-and-release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - pkgname: rode-editor
+            build_from_source: true
+          - pkgname: rode-editor-bin
+            build_from_source: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate PKGBUILD for source package
+        if: matrix.build_from_source
+        run: |
+          cat > PKGBUILD << 'EOF'
+          # Maintainer: kashyap <ksukshavasi@gmail.com>
+          pkgname=rode-editor
+          pkgver=${{ needs.check-version.outputs.version }}
+          pkgrel=1
+          pkgdesc="(somewhat) fast text editor written in rust"
+          arch=('x86_64')
+          url="https://github.com/kashsuks/Rode"
+          license=('GPL3')
+          depends=()
+          makedepends=('rust' 'cargo')
+          source=("$pkgname-$pkgver.tar.gz::https://github.com/kashsuks/Rode/archive/v$pkgver.tar.gz")
+          sha256sums=('SKIP')
+
+          build() {
+              cd "$srcdir/Rode-$pkgver"
+              cargo build --release --locked
+          }
+
+          package() {
+              cd "$srcdir/Rode-$pkgver"
+              install -Dm755 "target/release/rode" "$pkgdir/usr/bin/rode"
+          }
+          EOF
+
+      - name: Generate PKGBUILD for binary package
+        if: ${{ !matrix.build_from_source }}
+        run: |
+          cat > PKGBUILD << 'EOF'
+          # Maintainer: kashyap <ksukshavasi@gmail.com>
+          pkgname=rode-editor-bin
+          pkgver=${{ needs.check-version.outputs.version }}
+          pkgrel=1
+          pkgdesc="(somewhat) fast text editor written in rust (binary release)"
+          arch=('x86_64')
+          url="https://github.com/kashsuks/Rode"
+          license=('GPL3')
+          depends=()
+          provides=('rode')
+          conflicts=('rode')
+          source=("rode-$pkgver::https://github.com/kashsuks/Rode/releases/download/v$pkgver/rode-linux-x86_64")
+          sha256sums=('SKIP')
+
+          package() {
+              install -Dm755 "$srcdir/rode-$pkgver" "$pkgdir/usr/bin/rode"
+          }
+          EOF
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v2.7.0
+        with:
+          pkgname: ${{ matrix.pkgname }}
+          pkgbuild: ./PKGBUILD
+          commit_username: kashyap
+          commit_email: ksukshavasi@gmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update to ${{ needs.check-version.outputs.version }}
+

@@ -16,7 +16,7 @@ pub struct FileNode {
     pub is_dir: bool,
     pub is_expanded: bool, // State for whether the file node is expanded (user is searching deeper) or not
     pub children: Vec<FileNode>, // children will be be specifically for directories since files
-                                  // themselves cannot have children
+                           // themselves cannot have children
 }
 
 impl FileNode {
@@ -145,7 +145,8 @@ impl FileTree {
                             ui.add_space(6.0);
                             ui.label(egui::RichText::new("No folder opened").italics());
                             ui.label(
-                                egui::RichText::new("Use Open Folder to start browsing files.").weak(),
+                                egui::RichText::new("Use Open Folder to start browsing files.")
+                                    .weak(),
                             );
                         }
                     });
@@ -166,9 +167,7 @@ impl FileTree {
                     let settings_btn = ui.add_sized(
                         [ui.available_width(), 34.0],
                         egui::Button::new(
-                            egui::RichText::new("⚙ Settings")
-                                .color(gear_color)
-                                .strong(),
+                            egui::RichText::new("⚙ Settings").color(gear_color).strong(),
                         ),
                     );
 
@@ -233,4 +232,3 @@ impl FileTree {
         selected_file
     }
 }
-

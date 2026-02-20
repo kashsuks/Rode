@@ -1,18 +1,18 @@
+use crate::syntax_highlighter::SyntaxHighlighter;
 use eframe::egui;
 use std::env;
-use crate::syntax_highlighter::SyntaxHighlighter;
 
+mod autocomplete;
 mod command_palette;
 mod config;
 mod file_tree;
 mod fuzzy_finder;
 mod hotkey;
-mod setup;
-mod terminal;
 mod icon_manager;
 mod icon_theme;
-mod autocomplete;
+mod setup;
 mod syntax_highlighter;
+mod terminal;
 mod wakatime;
 
 // Main function with frame settings
@@ -34,8 +34,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0]) // default window size but can change
-            .with_title("CatEditor")
-            .with_fullscreen(true),
+            .with_title("CatEditor"),
         ..Default::default()
     };
 

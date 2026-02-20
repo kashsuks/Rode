@@ -1,3 +1,7 @@
+pub mod context;
+pub mod engine;
+pub mod language;
+pub mod scoring;
 /// Enhanced autocomplete system with fuzzy matching and language-based
 /// suggestions
 ///
@@ -6,14 +10,9 @@
 /// - Context aware suggestions (member access, type positions, etc)
 /// - Language specific keywords and types
 /// - Smart rankings based on relevance and rececny
-
 pub mod types;
-pub mod engine;
-pub mod context;
-pub mod scoring;
-pub mod language;
 
 // Re-export main public API
-pub use types::{Suggestion, SuggestionKind};
-pub use engine::Autocomplete;
 pub use context::CompletionContext;
+pub use engine::Autocomplete;
+pub use types::{Suggestion, SuggestionKind};

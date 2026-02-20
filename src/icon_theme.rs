@@ -7,8 +7,8 @@ pub fn get_file_icon_path(filename: &str) -> String {
 
     // First we can check the exact filenames and if there are no matches
     // We can move on to the expanded version
-    // If there are no matches yet, then we can just leave it as an unrecognizable file format 
-    
+    // If there are no matches yet, then we can just leave it as an unrecognizable file format
+
     let icon_name = match filename_lower.as_str() {
         "dockerfile" | ".dockerignore" => "docker",
         ".gitignore" | ".gitattributes" | ".gitmodules" => "git",
@@ -17,7 +17,7 @@ pub fn get_file_icon_path(filename: &str) -> String {
         "tsconfig.json" => "typescript",
         "webpack.config.js" | "webpack.config.ts" => "webpack",
         "gulpfile.js" => "gulp",
-        "gruntfile.js" => "grunt", // wtf is a gruntfile 
+        "gruntfile.js" => "grunt", // wtf is a gruntfile
         ".eslintrc" | ".eslintrc.js" | ".eslintrc.json" => "eslint",
         ".prettierrc" | ".prettierrc.js" | ".prettierrc.json" => "prettier",
         "yarn.lock" => "yarn",
@@ -150,15 +150,14 @@ pub fn get_file_icon_path(filename: &str) -> String {
     };
 
     let extension = match icon_name {
-        "actionscript" | "audio" | "axure" | "binary" | "buckle" | "c" | "c-h" |
-        "cake" | "certificate" | "cfc" | "cfm" | "coldfusion" | "cpp-h" |
-        "contributing" | "cursor" | "d" | "default" | "denizen" | "dlang" |
-        "docz" | "dust" | "editorconfig" | "exe" | "file" | "fish" | "foxpro" |
-        "gherkin" | "graphviz" | "haml" | "icon" | "image" | "markojs" |
-        "mustache" | "nextflow" | "notepad" | "oso" | "paket" | "pascal" |
-        "pascal-project" | "perl" | "png" | "powershell" | "razor" | "rlang" |
-        "rst" | "server" | "serverless" | "shell" | "smarty" | "stylelint" |
-        "tcl" | "textile" | "toml" | "twig" | "url" | "video" | "xaml" => "png",
+        "actionscript" | "audio" | "axure" | "binary" | "buckle" | "c" | "c-h" | "cake"
+        | "certificate" | "cfc" | "cfm" | "coldfusion" | "cpp-h" | "contributing" | "cursor"
+        | "d" | "default" | "denizen" | "dlang" | "docz" | "dust" | "editorconfig" | "exe"
+        | "file" | "fish" | "foxpro" | "gherkin" | "graphviz" | "haml" | "icon" | "image"
+        | "markojs" | "mustache" | "nextflow" | "notepad" | "oso" | "paket" | "pascal"
+        | "pascal-project" | "perl" | "png" | "powershell" | "razor" | "rlang" | "rst"
+        | "server" | "serverless" | "shell" | "smarty" | "stylelint" | "tcl" | "textile"
+        | "toml" | "twig" | "url" | "video" | "xaml" => "png",
         _ => "svg",
     };
 
@@ -169,27 +168,153 @@ pub fn get_folder_icon_path(folder_name: &str, is_open: bool) -> String {
     let folder_lower = folder_name.to_lowercase();
 
     let folder_icon = match folder_lower.as_str() {
-        "src" | "source" => if is_open { "src-open" } else { "src" },
-        "test" | "tests" | "__tests__" => if is_open { "tests-open" } else { "tests" },
-        "node_modules" => if is_open { "node-open" } else { "node" },
-        ".git" => if is_open { "git-open" } else { "git" },
-        "public" | "static" | "assets" => if is_open { "images-open" } else { "images" },
-        "dist" | "build" | "out" => if is_open { "build-open" } else { "build" },
-        "bower_components" => if is_open { "bower-open" } else { "bower" },
-        "app" => if is_open { "app-open" } else { "app" },
-        "components" | "views" => if is_open { "views-open" } else { "views" },
-        "services" => if is_open { "services-open" } else { "services" },
-        "styles" | "css" | "scss" => if is_open { "styles-open" } else { "styles" },
-        "i18n" | "locales" => if is_open { "i18n-open" } else { "i18n" },
-        "db" | "database" => if is_open { "db-open" } else { "db" },
-        "cypress" => if is_open { "cypress-open" } else { "cypress" },
-        "jest" | "__jest__" => if is_open { "jest-open" } else { "jest" },
-        "next" | ".next" => if is_open { "next-open" } else { "next" },
-        "bench" | "benchmarks" => if is_open { "bench-open" } else { "bench" },
-        "layout" | "layouts" => if is_open { "layout-open" } else { "layout" },
-        "theme" | "themes" => if is_open { "theme-open" } else { "theme" },
-        ".vscode" => if is_open { "vsc-open" } else { "vsc" },
-        _ => if is_open { "default-open" } else { "default" },
+        "src" | "source" => {
+            if is_open {
+                "src-open"
+            } else {
+                "src"
+            }
+        }
+        "test" | "tests" | "__tests__" => {
+            if is_open {
+                "tests-open"
+            } else {
+                "tests"
+            }
+        }
+        "node_modules" => {
+            if is_open {
+                "node-open"
+            } else {
+                "node"
+            }
+        }
+        ".git" => {
+            if is_open {
+                "git-open"
+            } else {
+                "git"
+            }
+        }
+        "public" | "static" | "assets" => {
+            if is_open {
+                "images-open"
+            } else {
+                "images"
+            }
+        }
+        "dist" | "build" | "out" => {
+            if is_open {
+                "build-open"
+            } else {
+                "build"
+            }
+        }
+        "bower_components" => {
+            if is_open {
+                "bower-open"
+            } else {
+                "bower"
+            }
+        }
+        "app" => {
+            if is_open {
+                "app-open"
+            } else {
+                "app"
+            }
+        }
+        "components" | "views" => {
+            if is_open {
+                "views-open"
+            } else {
+                "views"
+            }
+        }
+        "services" => {
+            if is_open {
+                "services-open"
+            } else {
+                "services"
+            }
+        }
+        "styles" | "css" | "scss" => {
+            if is_open {
+                "styles-open"
+            } else {
+                "styles"
+            }
+        }
+        "i18n" | "locales" => {
+            if is_open {
+                "i18n-open"
+            } else {
+                "i18n"
+            }
+        }
+        "db" | "database" => {
+            if is_open {
+                "db-open"
+            } else {
+                "db"
+            }
+        }
+        "cypress" => {
+            if is_open {
+                "cypress-open"
+            } else {
+                "cypress"
+            }
+        }
+        "jest" | "__jest__" => {
+            if is_open {
+                "jest-open"
+            } else {
+                "jest"
+            }
+        }
+        "next" | ".next" => {
+            if is_open {
+                "next-open"
+            } else {
+                "next"
+            }
+        }
+        "bench" | "benchmarks" => {
+            if is_open {
+                "bench-open"
+            } else {
+                "bench"
+            }
+        }
+        "layout" | "layouts" => {
+            if is_open {
+                "layout-open"
+            } else {
+                "layout"
+            }
+        }
+        "theme" | "themes" => {
+            if is_open {
+                "theme-open"
+            } else {
+                "theme"
+            }
+        }
+        ".vscode" => {
+            if is_open {
+                "vsc-open"
+            } else {
+                "vsc"
+            }
+        }
+        _ => {
+            if is_open {
+                "default-open"
+            } else {
+                "default"
+            }
+        }
     };
 
     format!("{}/folders/{}.svg", ICONS_PATH, folder_icon)

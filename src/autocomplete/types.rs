@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 pub struct Suggestion {
     pub text: String,
     pub kind: SuggestionKind,
-    pub detail: Option<String>, // any additional context such as 
-                                // function signatures
-    pub score: f32
+    pub detail: Option<String>, // any additional context such as
+    // function signatures
+    pub score: f32,
 }
 
 impl Suggestion {
@@ -19,7 +19,7 @@ impl Suggestion {
             score: 0.0,
         }
     }
-    
+
     /// Actually create a suggestion with the given score
     pub fn with_score(text: String, kind: SuggestionKind, score: f32) -> Self {
         Self {

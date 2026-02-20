@@ -175,15 +175,21 @@ fn color_input(ui: &mut egui::Ui, label: &str, value: &mut String) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
         ui.label(format!("{}:", label));
-        
+
         // Parse current color for preview
         let preview_color = parse_color_preview(value);
-        
+
         // Show color preview square
-        let (rect, _response) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
-        ui.painter().rect_filled(rect, egui::Rounding::same(3.0), preview_color);
-        ui.painter().rect_stroke(rect, egui::Rounding::same(3.0), egui::Stroke::new(1.0, egui::Color32::GRAY));
-        
+        let (rect, _response) =
+            ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
+        ui.painter()
+            .rect_filled(rect, egui::Rounding::same(3.0), preview_color);
+        ui.painter().rect_stroke(
+            rect,
+            egui::Rounding::same(3.0),
+            egui::Stroke::new(1.0, egui::Color32::GRAY),
+        );
+
         let response = ui.add(
             egui::TextEdit::singleline(value)
                 .desired_width(100.0)

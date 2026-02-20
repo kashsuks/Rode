@@ -1,13 +1,13 @@
-use std::collections::HashSet;
 use crate::autocomplete::{
-    types::{Suggestion, SuggestionKind},
     context::CompletionContext,
-    scoring::FuzzyScorer,
     language::LanguageDefinitions,
+    scoring::FuzzyScorer,
+    types::{Suggestion, SuggestionKind},
 };
+use std::collections::HashSet;
 
 /// Main autocomplete engine
-/// 
+///
 /// Provides intelligent code completion with fuzzy matching, context awareness,
 /// and language-specific suggestions.
 pub struct Autocomplete {
@@ -16,9 +16,9 @@ pub struct Autocomplete {
     pub selected_index: usize,
     pub trigger_position: usize,
     pub prefix: String,
-    
+
     language_defs: LanguageDefinitions,
-    
+
     recent_identifiers: Vec<String>,
     max_recent: usize,
 }
@@ -63,7 +63,7 @@ impl Autocomplete {
 
         let current_word = text[word_start..cursor_pos].to_string();
         (current_word, word_start)
-    } 
+    }
 
     pub fn extract_identifiers(&mut self, text: &str) -> HashSet<String> {
         let mut identifiers = HashSet::new();
@@ -76,7 +76,7 @@ impl Autocomplete {
                 if !current_word.is_empty() && current_word.len() > 1 {
                     if !current_word.chars().next().unwrap().is_numeric() {
                         identifiers.insert(current_word.clone());
-                        
+
                         if !self.recent_identifiers.contains(&current_word) {
                             self.recent_identifiers.push(current_word.clone());
                             if self.recent_identifiers.len() > self.max_recent {
@@ -97,26 +97,35 @@ impl Autocomplete {
     }
 
     /// Infer what kind of identifier this is based on context and patterns
-    fn infer_identifier_kind(&self, text: &str, identifier: &str, context: &CompletionContext) -> SuggestionKind {
+    fn infer_identifier_kind(
+        &self,
+        text: &str,
+        identifier: &str,
+        context: &CompletionContext,
+    ) -> SuggestionKind {
         if context.is_member_access {
             if context.is_function_call {
                 return SuggestionKind::Method;
             }
             return SuggestionKind::Property;
         }
-        
+
         if text.contains(&format!("{}(", identifier)) {
             return SuggestionKind::Function;
         }
-        
-        if identifier.chars().next().map_or(false, |c| c.is_uppercase()) {
+
+        if identifier
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_uppercase())
+        {
             return SuggestionKind::Type;
         }
-        
+
         if identifier.chars().all(|c| c.is_uppercase() || c == '_') {
             return SuggestionKind::Constant;
         }
-        
+
         SuggestionKind::Variable
     }
 
@@ -144,7 +153,8 @@ impl Autocomplete {
 
         // Sort by score (highest first)
         all_suggestions.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score)
+            b.score
+                .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| a.text.cmp(&b.text))
         });
@@ -159,7 +169,12 @@ impl Autocomplete {
         self.active = !self.suggestions.is_empty();
     }
 
-    fn add_keyword_suggestions(&self, prefix: &str, language: Option<&str>, suggestions: &mut Vec<Suggestion>) {
+    fn add_keyword_suggestions(
+        &self,
+        prefix: &str,
+        language: Option<&str>,
+        suggestions: &mut Vec<Suggestion>,
+    ) {
         let keywords = if let Some(lang) = language {
             self.language_defs.get_keywords(lang)
         } else {
@@ -194,7 +209,7 @@ impl Autocomplete {
         for type_name in types {
             let mut score = FuzzyScorer::score(&type_name, prefix);
             score = FuzzyScorer::apply_context_boost(score, &SuggestionKind::Type, context);
-            
+
             if score > 0.0 && type_name != prefix {
                 suggestions.push(Suggestion::with_score(
                     type_name,
@@ -215,16 +230,12 @@ impl Autocomplete {
         for identifier in &self.recent_identifiers.clone() {
             let mut score = FuzzyScorer::score(identifier, prefix);
             score = FuzzyScorer::apply_recency_boost(score, true);
-            
+
             if score > 100.0 && identifier != prefix {
                 let kind = self.infer_identifier_kind(text, identifier, context);
                 score = FuzzyScorer::apply_context_boost(score, &kind, context);
-                
-                suggestions.push(Suggestion::with_score(
-                    identifier.clone(),
-                    kind,
-                    score,
-                ));
+
+                suggestions.push(Suggestion::with_score(identifier.clone(), kind, score));
             }
         }
 
@@ -234,12 +245,8 @@ impl Autocomplete {
             if score > 0.0 && identifier != prefix {
                 let kind = self.infer_identifier_kind(text, &identifier, context);
                 let adjusted_score = FuzzyScorer::apply_context_boost(score, &kind, context);
-                
-                suggestions.push(Suggestion::with_score(
-                    identifier,
-                    kind,
-                    adjusted_score,
-                ));
+
+                suggestions.push(Suggestion::with_score(identifier, kind, adjusted_score));
             }
         }
     }
@@ -278,7 +285,7 @@ impl Autocomplete {
             }
 
             let safe_cursor = (*cursor_pos).min(text.len());
-            
+
             if self.trigger_position > safe_cursor {
                 self.active = false;
                 return false;

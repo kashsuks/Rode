@@ -823,7 +823,11 @@ impl CatEditorApp {
     }
 
     fn show_welcome_screen(&mut self, ui: &mut egui::Ui) {
-        let command_label = if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" };
+        let command_label = if cfg!(target_os = "macos") {
+            "Cmd"
+        } else {
+            "Ctrl"
+        };
 
         ui.vertical_centered(|ui| {
             ui.add_space((ui.available_height() * 0.22).max(40.0));
@@ -870,4 +874,3 @@ impl CatEditorApp {
         });
     }
 }
-

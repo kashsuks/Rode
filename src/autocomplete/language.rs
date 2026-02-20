@@ -30,22 +30,22 @@ impl LanguageDefinitions {
         self.keywords.insert(
             "rust".to_string(),
             vec![
-                "fn", "let", "mut", "const", "static", "if", "else", "match", "for",
-                "while", "loop", "return", "break", "continue", "pub", "use", "mod",
-                "struct", "enum", "trait", "impl", "type", "where", "unsafe", "async",
-                "await", "move", "ref", "as", "in", "crate", "super", "self", "Self",
+                "fn", "let", "mut", "const", "static", "if", "else", "match", "for", "while",
+                "loop", "return", "break", "continue", "pub", "use", "mod", "struct", "enum",
+                "trait", "impl", "type", "where", "unsafe", "async", "await", "move", "ref", "as",
+                "in", "crate", "super", "self", "Self",
             ]
             .iter()
             .map(|s| s.to_string())
             .collect(),
         );
-        
+
         self.types.insert(
             "rust".to_string(),
             vec![
-                "String", "Vec", "HashMap", "HashSet", "Option", "Result", "Box", 
-                "Rc", "Arc", "bool", "i32", "i64", "u32", "u64", "f32", "f64", 
-                "char", "str", "usize", "isize", "i8", "i16", "u8", "u16",
+                "String", "Vec", "HashMap", "HashSet", "Option", "Result", "Box", "Rc", "Arc",
+                "bool", "i32", "i64", "u32", "u64", "f32", "f64", "char", "str", "usize", "isize",
+                "i8", "i16", "u8", "u16",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -57,21 +57,21 @@ impl LanguageDefinitions {
         self.keywords.insert(
             "javascript".to_string(),
             vec![
-                "function", "const", "let", "var", "if", "else", "for", "while",
-                "return", "break", "continue", "switch", "case", "default", "try",
-                "catch", "finally", "throw", "new", "class", "extends", "import",
-                "export", "default", "async", "await", "yield", "static", "this",
+                "function", "const", "let", "var", "if", "else", "for", "while", "return", "break",
+                "continue", "switch", "case", "default", "try", "catch", "finally", "throw", "new",
+                "class", "extends", "import", "export", "default", "async", "await", "yield",
+                "static", "this",
             ]
             .iter()
             .map(|s| s.to_string())
             .collect(),
         );
-        
+
         self.types.insert(
             "javascript".to_string(),
             vec![
-                "Array", "Object", "String", "Number", "Boolean", "Date", "RegExp",
-                "Promise", "Map", "Set", "WeakMap", "WeakSet", "Symbol",
+                "Array", "Object", "String", "Number", "Boolean", "Date", "RegExp", "Promise",
+                "Map", "Set", "WeakMap", "WeakSet", "Symbol",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -83,24 +83,57 @@ impl LanguageDefinitions {
         self.keywords.insert(
             "typescript".to_string(),
             vec![
-                "function", "const", "let", "var", "if", "else", "for", "while",
-                "return", "break", "continue", "switch", "case", "default", "try",
-                "catch", "finally", "throw", "new", "class", "extends", "import",
-                "export", "default", "async", "await", "yield", "static", "this",
-                "interface", "type", "enum", "namespace", "implements", "readonly",
-                "public", "private", "protected", "abstract",
+                "function",
+                "const",
+                "let",
+                "var",
+                "if",
+                "else",
+                "for",
+                "while",
+                "return",
+                "break",
+                "continue",
+                "switch",
+                "case",
+                "default",
+                "try",
+                "catch",
+                "finally",
+                "throw",
+                "new",
+                "class",
+                "extends",
+                "import",
+                "export",
+                "default",
+                "async",
+                "await",
+                "yield",
+                "static",
+                "this",
+                "interface",
+                "type",
+                "enum",
+                "namespace",
+                "implements",
+                "readonly",
+                "public",
+                "private",
+                "protected",
+                "abstract",
             ]
             .iter()
             .map(|s| s.to_string())
             .collect(),
         );
-        
+
         self.types.insert(
             "typescript".to_string(),
             vec![
-                "Array", "Object", "String", "Number", "Boolean", "Date", "RegExp",
-                "Promise", "Map", "Set", "WeakMap", "WeakSet", "Symbol",
-                "string", "number", "boolean", "any", "void", "never", "unknown",
+                "Array", "Object", "String", "Number", "Boolean", "Date", "RegExp", "Promise",
+                "Map", "Set", "WeakMap", "WeakSet", "Symbol", "string", "number", "boolean", "any",
+                "void", "never", "unknown",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -112,21 +145,31 @@ impl LanguageDefinitions {
         self.keywords.insert(
             "python".to_string(),
             vec![
-                "def", "class", "if", "elif", "else", "for", "while", "return",
-                "break", "continue", "import", "from", "as", "try", "except",
-                "finally", "raise", "with", "yield", "lambda", "pass", "global",
-                "nonlocal", "assert", "del", "in", "is", "not", "and", "or",
+                "def", "class", "if", "elif", "else", "for", "while", "return", "break",
+                "continue", "import", "from", "as", "try", "except", "finally", "raise", "with",
+                "yield", "lambda", "pass", "global", "nonlocal", "assert", "del", "in", "is",
+                "not", "and", "or",
             ]
             .iter()
             .map(|s| s.to_string())
             .collect(),
         );
-        
+
         self.types.insert(
             "python".to_string(),
             vec![
-                "int", "float", "str", "list", "dict", "tuple", "set", "bool",
-                "bytes", "bytearray", "complex", "frozenset",
+                "int",
+                "float",
+                "str",
+                "list",
+                "dict",
+                "tuple",
+                "set",
+                "bool",
+                "bytes",
+                "bytearray",
+                "complex",
+                "frozenset",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -135,17 +178,11 @@ impl LanguageDefinitions {
     }
 
     pub fn get_keywords(&self, language: &str) -> Vec<String> {
-        self.keywords
-            .get(language)
-            .cloned()
-            .unwrap_or_default()
+        self.keywords.get(language).cloned().unwrap_or_default()
     }
 
     pub fn get_types(&self, language: &str) -> Vec<String> {
-        self.types
-            .get(language)
-            .cloned()
-            .unwrap_or_default()
+        self.types.get(language).cloned().unwrap_or_default()
     }
 
     pub fn get_all_keywords(&self) -> Vec<String> {

@@ -28,23 +28,21 @@ pub struct LanguageDefinition {
     types: Vec<&'static str>,
     constants: Vec<&'static str>,
     comment_single: Option<&'static str>,
-    comment_multi: Option <(&'static str, &'static str)>,
+    comment_multi: Option<(&'static str, &'static str)>,
     string_delimiters: Vec<char>,
 }
 
 static RUST_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinition {
     keywords: vec![
-        "fn", "let", "mut", "const", "static", "if", "else", "match", "for",
-        "while", "loop", "return", "break", "continue", "pub", "use", "mod",
-        "struct", "enum", "trait", "impl", "type", "where", "unsafe", "async",
-        "await", "move", "ref", "as", "in", "crate", "super", "self", "Self",
+        "fn", "let", "mut", "const", "static", "if", "else", "match", "for", "while", "loop",
+        "return", "break", "continue", "pub", "use", "mod", "struct", "enum", "trait", "impl",
+        "type", "where", "unsafe", "async", "await", "move", "ref", "as", "in", "crate", "super",
+        "self", "Self",
     ],
     types: vec![
-        "i8", "i16", "i32", "i64", "i128", "isize",
-        "u8", "u16", "u32", "u64", "u128", "usize",
-        "f32", "f64", "bool", "char", "str",
-        "String", "Vec", "Option", "Result", "Box", "Rc", "Arc",
-        "HashMap", "HashSet", "BTreeMap", "BTreeSet",
+        "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+        "f32", "f64", "bool", "char", "str", "String", "Vec", "Option", "Result", "Box", "Rc",
+        "Arc", "HashMap", "HashSet", "BTreeMap", "BTreeSet",
     ],
     constants: vec!["true", "false", "None", "Some", "Ok", "Err"],
     comment_single: Some("//"),
@@ -54,12 +52,14 @@ static RUST_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinition {
 
 static JAVASCRIPT_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinition {
     keywords: vec![
-        "function", "const", "let", "var", "if", "else", "for", "while", 
-        "return", "break", "continue", "switch", "case", "default", "try",
-        "catch", "finally", "throw", "new", "class", "extends", "import",
-        "export", "from", "async", "await", "yield", "static", "this",
+        "function", "const", "let", "var", "if", "else", "for", "while", "return", "break",
+        "continue", "switch", "case", "default", "try", "catch", "finally", "throw", "new",
+        "class", "extends", "import", "export", "from", "async", "await", "yield", "static",
+        "this",
     ],
-    types: vec!["Array", "Object", "String", "Number", "Boolean", "Date", "RegExp"],
+    types: vec![
+        "Array", "Object", "String", "Number", "Boolean", "Date", "RegExp",
+    ],
     constants: vec!["true", "false", "null", "undefined", "NaN", "Infinity"],
     comment_single: Some("//"),
     comment_multi: Some(("/*", "*/")),
@@ -68,12 +68,13 @@ static JAVASCRIPT_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinitio
 
 static PYTHON_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinition {
     keywords: vec![
-        "def", "class", "if", "elif", "else", "for", "while", "return",
-        "break", "continue", "import", "from", "as", "try", "except",
-        "finally", "raise", "with", "yield", "lambda", "pass", "global",
-        "nonlocal", "assert", "del", "in", "is", "not", "and", "or",
+        "def", "class", "if", "elif", "else", "for", "while", "return", "break", "continue",
+        "import", "from", "as", "try", "except", "finally", "raise", "with", "yield", "lambda",
+        "pass", "global", "nonlocal", "assert", "del", "in", "is", "not", "and", "or",
     ],
-    types: vec!["int", "float", "str", "list", "dict", "tuple", "set", "bool"],
+    types: vec![
+        "int", "float", "str", "list", "dict", "tuple", "set", "bool",
+    ],
     constants: vec!["True", "False", "None"],
     comment_single: Some("#"),
     comment_multi: None,
@@ -82,16 +83,49 @@ static PYTHON_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinition {
 
 static TYPESCRIPT_DEF: Lazy<LanguageDefinition> = Lazy::new(|| LanguageDefinition {
     keywords: vec![
-        "function", "const", "let", "var", "if", "else", "for", "while",
-        "return", "break", "continue", "switch", "case", "default", "try",
-        "catch", "finally", "throw", "new", "class", "extends", "import",
-        "export", "from", "async", "await", "yield", "static", "this",
-        "interface", "type", "enum", "namespace", "implements", "readonly",
-        "public", "private", "protected", "abstract",
+        "function",
+        "const",
+        "let",
+        "var",
+        "if",
+        "else",
+        "for",
+        "while",
+        "return",
+        "break",
+        "continue",
+        "switch",
+        "case",
+        "default",
+        "try",
+        "catch",
+        "finally",
+        "throw",
+        "new",
+        "class",
+        "extends",
+        "import",
+        "export",
+        "from",
+        "async",
+        "await",
+        "yield",
+        "static",
+        "this",
+        "interface",
+        "type",
+        "enum",
+        "namespace",
+        "implements",
+        "readonly",
+        "public",
+        "private",
+        "protected",
+        "abstract",
     ],
     types: vec![
-        "Array", "Object", "String", "Number", "Boolean", "Date", "RegExp",
-        "string", "number", "boolean", "any", "void", "never", "unknown",
+        "Array", "Object", "String", "Number", "Boolean", "Date", "RegExp", "string", "number",
+        "boolean", "any", "void", "never", "unknown",
     ],
     constants: vec!["true", "false", "null", "undefined", "NaN", "Infinity"],
     comment_single: Some("//"),
@@ -127,7 +161,7 @@ impl SyntaxHighlighter {
 
         match extension {
             "rs" => Some("rust".to_string()),
-            "js" |"mjs" | "cjs" | "jsx" => Some("javascript".to_string()),
+            "js" | "mjs" | "cjs" | "jsx" => Some("javascript".to_string()),
             "ts" | "tsx" => Some("typescript".to_string()),
             "py" => Some("python".to_string()),
             _ => None,
@@ -146,7 +180,7 @@ impl SyntaxHighlighter {
 
         while i < chars.len() {
             if chars[i].is_whitespace() {
-                i += 1; // skip the whitespace 
+                i += 1; // skip the whitespace
                 continue;
             }
 
@@ -214,7 +248,9 @@ impl SyntaxHighlighter {
 
             if chars[i].is_numeric() {
                 let num_start = i;
-                while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '.' || chars[i] == '_') {
+                while i < chars.len()
+                    && (chars[i].is_alphanumeric() || chars[i] == '.' || chars[i] == '_')
+                {
                     i += 1;
                 }
 

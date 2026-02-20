@@ -9,7 +9,7 @@ pub struct CompletionContext {
     /// Example
     /// `obj. |` or `String.|`
     pub is_member_access: bool,
-    
+
     pub is_function_call: bool,
     pub is_namespace_access: bool,
     pub is_type_position: bool,
@@ -52,8 +52,8 @@ impl CompletionContext {
     }
 
     /// We should consider whether boosting in a context like
-    /// this is ideal or not 
-    /// This returns of whether or not a boost is ideal 
+    /// this is ideal or not
+    /// This returns of whether or not a boost is ideal
     pub fn should_boost_types(&self) -> bool {
         self.is_type_position
     }
@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn test_namespace_access() { 
+    fn test_namespace_access() {
         let text = "std::";
         let context = CompletionContext::analyze(text, text.len());
         assert!(context.is_namespace_access);
