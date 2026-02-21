@@ -12,18 +12,11 @@ mod icon_manager;
 mod icon_theme;
 mod setup;
 mod syntax_highlighter;
+mod syntax_highlighting;
 mod terminal;
 mod wakatime;
 
-// Main function with frame settings
-//
-// # Examples
-//
-// ```
-// my_crate::main()
-// ```
 fn main() -> eframe::Result<()> {
-    //get the args
     let args: Vec<String> = env::args().collect();
     let file_path = if args.len() > 1 {
         Some(args[1].clone())
@@ -33,8 +26,9 @@ fn main() -> eframe::Result<()> {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 600.0]) // default window size but can change
-            .with_title("CatEditor"),
+            .with_inner_size([800.0, 600.0])
+            .with_title("CatEditor")
+            .with_fullscreen(true),
         ..Default::default()
     };
 
