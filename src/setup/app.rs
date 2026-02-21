@@ -11,6 +11,7 @@ use crate::setup::theme;
 use crate::syntax_highlighter::SyntaxHighlighter;
 use crate::terminal::Terminal;
 use crate::wakatime::{self, WakaTimeConfig};
+
 use eframe::egui;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -318,14 +319,12 @@ impl eframe::App for CatEditorApp {
                                     if let Some(cursor_range) = output.cursor_range {
                                         let cursor_pos = cursor_range.primary.ccursor.index;
 
+                                        // check if the user just typed
+                                        // an opening bracket
                                         if cursor_pos > 0 {
                                             let chars: Vec<char> = self.text.chars().collect();
                                             if cursor_pos <= chars.len() {
-                                                let prev_char = if cursor_pos > 0 {
-                                                    chars.get(cursor_pos - 1)
-                                                } else {
-                                                    None
-                                                };
+                                                let prev_char = chars.get(cursor_pos - 1);
 
                                                 if let Some(&ch) = prev_char {
                                                     let closing = match ch {
@@ -340,6 +339,13 @@ impl eframe::App for CatEditorApp {
                                                     }
                                                 }
                                             }
+                                        }
+
+                                        // auto indent when Enter creates a new line
+                                        if let Some(indent) =
+                                            Self::compute_newline_indent(&self.text, cursor_pos)
+                                        {
+                                            self.text.insert_str(cursor_pos, &indent);
                                         }
                                     }
                                 }
@@ -873,4 +879,54 @@ impl CatEditorApp {
             );
         });
     }
+
+    fn indent_unit_from_line(base_indent: &str) -> &'static str {
+        if base_indent.contains('\t') {
+            "\t"
+        } else {
+            "    "
+        }
+    }
+
+    fn compute_newline_indent(text: &str, cursor_pos: usize) -> Option<String> {
+        if cursor_pos == 0 {
+            return None;
+        }
+
+        let chars: Vec<char> = text.chars().collect();
+        if cursor_pos > chars.len() || chars.get(cursor_pos - 1) != Some(&'\n') {
+            return None;
+        }
+
+        // previous line is the line before the newline at `cursor_pos - 1`
+        let prev_line_end = cursor_pos - 1;
+        let mut prev_line_start = prev_line_end;
+        while prev_line_start > 0 && chars[prev_line_start - 1] != '\n' {
+            prev_line_start -= 1;
+        }
+
+        let prev_line: String = chars[prev_line_start..prev_line_end].iter().collect();
+        let base_indent: String = prev_line
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect();
+
+        let trimmed = prev_line.trim_end();
+        let should_indent_more = trimmed.ends_with('{')
+            || trimmed.ends_with('[')
+            || trimmed.ends_with('(')
+            || trimmed.ends_with(':');
+
+        let mut indent = base_indent;
+        if should_indent_more {
+            indent.push_str(Self::indent_unit_from_line(&indent));
+        }
+
+        if indent.is_empty() {
+            None
+        } else {
+            Some(indent)
+        }
+    }
 }
+
