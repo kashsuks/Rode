@@ -8,4 +8,5 @@
 //! - Theme manager config and panel to change the colours of the theme
 
 pub mod file_ops;
+pub mod preferences;
 pub mod theme_manager;

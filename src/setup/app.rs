@@ -1,5 +1,9 @@
 use crate::autocomplete::Autocomplete;
 use crate::command_palette::CommandPalette;
+use crate::config::preferences::{
+    load_preferences, load_theme_by_name, save_preferences, EditorPreferences,
+    list_available_themes,
+};
 use crate::config::theme_manager::{load_theme, ThemeColors};
 use crate::file_tree::{FileTree, FileTreeAction};
 use crate::fuzzy_finder::FuzzyFinder;
@@ -40,6 +44,10 @@ pub struct CatEditorApp {
     leader_sequence: String,
     settings_open: bool,
 
+    pub preferences: EditorPreferences,
+    available_themes: Vec<String>,
+    tab_size_input: String,
+
     wakatime: WakaTimeConfig,
     last_wakatime_entity: Option<String>,
     last_wakatime_sent_at: Option<Instant>,
@@ -47,7 +55,14 @@ pub struct CatEditorApp {
 
 impl Default for CatEditorApp {
     fn default() -> Self {
-        let theme = load_theme();
+        let prefs = load_preferences();
+        let theme = if prefs.theme_name == "default" {
+            load_theme()
+        } else {
+            load_theme_by_name(&prefs.theme_name)
+        };
+        let tab_size_str = prefs.tab_size.to_string();
+        let available_themes = list_available_themes();
         Self {
             text: String::new(),
             command_buffer: String::new(),
@@ -68,6 +83,9 @@ impl Default for CatEditorApp {
             leader_pressed: false,
             leader_sequence: String::new(),
             settings_open: false,
+            preferences: prefs,
+            available_themes,
+            tab_size_input: tab_size_str,
             wakatime: wakatime::load(),
             last_wakatime_entity: None,
             last_wakatime_sent_at: None,
@@ -308,10 +326,14 @@ impl eframe::App for CatEditorApp {
                             .desired_width(f32::INFINITY);
 
                         let available = ui.available_size();
-                        let output = ui.allocate_ui(available, |ui| text_edit.show(ui)).inner;
+                        let mut output = ui.allocate_ui(available, |ui| text_edit.show(ui)).inner;
+                        let te_id = output.response.id;
 
                         let current_text_len = self.text.len();
                         static mut LAST_TEXT_LEN: usize = 0;
+
+                        // Track whether we need to reposition the cursor
+                        let mut new_cursor_pos: Option<usize> = None;
 
                         if output.response.changed() {
                             unsafe {
@@ -342,10 +364,11 @@ impl eframe::App for CatEditorApp {
                                         }
 
                                         // auto indent when Enter creates a new line
-                                        if let Some(indent) =
-                                            Self::compute_newline_indent(&self.text, cursor_pos)
+                                        if let Some((indent, cursor_offset)) =
+                                            Self::compute_newline_indent(&self.text, cursor_pos, &self.preferences)
                                         {
                                             self.text.insert_str(cursor_pos, &indent);
+                                            new_cursor_pos = Some(cursor_pos + cursor_offset);
                                         }
                                     }
                                 }
@@ -354,6 +377,42 @@ impl eframe::App for CatEditorApp {
                             }
 
                             self.maybe_send_wakatime_heartbeat(false);
+                        }
+
+                        // Handle Tab key to insert indent instead of navigating focus
+                        if output.response.has_focus() && !self.autocomplete.active {
+                            let tab_pressed = ctx.input(|i| {
+                                i.key_pressed(egui::Key::Tab) && !i.modifiers.any()
+                            });
+                            if tab_pressed {
+                                if let Some(cursor_range) = output.cursor_range {
+                                    let cursor_pos = cursor_range.primary.ccursor.index;
+                                    let indent = self.preferences.indent_unit();
+                                    self.text.insert_str(cursor_pos, &indent);
+                                    new_cursor_pos = Some(cursor_pos + indent.len());
+                                }
+                                // Consume the Tab event so it doesn't navigate focus
+                                ctx.input_mut(|i| {
+                                    i.events.retain(|e| {
+                                        !matches!(
+                                            e,
+                                            egui::Event::Key {
+                                                key: egui::Key::Tab,
+                                                pressed: true,
+                                                ..
+                                            }
+                                        )
+                                    });
+                                });
+                            }
+                        }
+
+                        // Apply the new cursor position if we inserted indent/tab
+                        if let Some(pos) = new_cursor_pos {
+                            let ccursor = egui::text::CCursor::new(pos);
+                            let range = egui::text::CCursorRange::one(ccursor);
+                            output.state.cursor.set_char_range(Some(range));
+                            output.state.store(ctx, te_id);
                         }
 
                         if let Some(language) = &self.current_language {
@@ -633,50 +692,162 @@ impl CatEditorApp {
         egui::Window::new("Settings")
             .open(&mut self.settings_open)
             .resizable(true)
-            .default_size(egui::vec2(620.0, 480.0))
+            .default_size(egui::vec2(620.0, 520.0))
             .show(ctx, |ui| {
                 ui.heading("Rode Settings");
                 ui.separator();
-                ui.label("Theme is editable from the top menu: Theme.");
-                ui.label("Shortcut: Cmd/Ctrl + Shift + S");
+
+                // ── Preferences ──────────────────────────────────
+                egui::CollapsingHeader::new(
+                    egui::RichText::new("Preferences").strong().size(16.0),
+                )
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.add_space(4.0);
+
+                    // Tab size
+                    ui.horizontal(|ui| {
+                        ui.label("Tab Size:");
+                        let response = ui.add(
+                            egui::TextEdit::singleline(&mut self.tab_size_input)
+                                .desired_width(50.0)
+                                .hint_text("4"),
+                        );
+                        if response.lost_focus()
+                            || response.changed()
+                        {
+                            if let Ok(size) = self.tab_size_input.parse::<usize>() {
+                                let clamped = size.max(1).min(16);
+                                self.preferences.tab_size = clamped;
+                            }
+                        }
+                    });
+
+                    // Use spaces vs tabs
+                    ui.horizontal(|ui| {
+                        ui.label("Indent with:");
+                        if ui
+                            .selectable_label(self.preferences.use_spaces, "Spaces")
+                            .clicked()
+                        {
+                            self.preferences.use_spaces = true;
+                        }
+                        if ui
+                            .selectable_label(!self.preferences.use_spaces, "Tabs")
+                            .clicked()
+                        {
+                            self.preferences.use_spaces = false;
+                        }
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Theme selection
+                    ui.label("Theme:");
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("theme_selector")
+                            .selected_text(&self.preferences.theme_name)
+                            .show_ui(ui, |ui| {
+                                let themes = self.available_themes.clone();
+                                for theme_name in &themes {
+                                    if ui
+                                        .selectable_label(
+                                            self.preferences.theme_name == *theme_name,
+                                            theme_name,
+                                        )
+                                        .clicked()
+                                    {
+                                        self.preferences.theme_name = theme_name.clone();
+                                        self.theme = load_theme_by_name(theme_name);
+                                    }
+                                }
+                            });
+
+                        if ui.button("Load from file…").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Lua theme", &["lua"])
+                                .pick_file()
+                            {
+                                if let Ok(content) = std::fs::read_to_string(&path) {
+                                    if let Ok(loaded_theme) =
+                                        crate::config::theme_manager::ThemeColors::from_lua(
+                                            &content,
+                                        )
+                                    {
+                                        self.theme = loaded_theme;
+                                        // Use filename without extension as theme name
+                                        let name = path
+                                            .file_stem()
+                                            .and_then(|s| s.to_str())
+                                            .unwrap_or("custom")
+                                            .to_string();
+                                        self.preferences.theme_name = name;
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    ui.add_space(4.0);
+                    if ui.button("Reload Theme").clicked() {
+                        self.theme = load_theme_by_name(&self.preferences.theme_name);
+                    }
+
+                    if ui.button("Refresh Theme List").clicked() {
+                        self.available_themes = list_available_themes();
+                    }
+
+                    ui.add_space(8.0);
+                    if ui.button("Save Preferences").clicked() {
+                        self.tab_size_input = self.preferences.tab_size.to_string();
+                        let _ = save_preferences(&self.preferences);
+                    }
+                });
+
                 ui.add_space(8.0);
+                ui.separator();
 
-                if ui.button("Reload Theme").clicked() {
-                    self.theme = load_theme();
-                }
-
+                // ── Command Palette ──────────────────────────────
                 if ui.button("Open Command Palette").clicked() {
                     self.command_palette.toggle();
                 }
 
-                ui.separator();
-                ui.heading("WakaTime");
-                ui.add_space(6.0);
-
-                ui.label("API Key");
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.wakatime.api_key)
-                        .password(true)
-                        .hint_text("waka_..."),
-                );
-
-                ui.add_space(6.0);
-                ui.label("API URL");
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.wakatime.api_url)
-                        .hint_text("https://api.wakatime.com/api/v1"),
-                );
-
                 ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Save WakaTime Settings").clicked() {
-                        let _ = wakatime::save(&self.wakatime);
-                    }
+                ui.separator();
 
-                    if ui.button("Use Hackatime URL").clicked() {
-                        self.wakatime.api_url =
-                            "https://hackatime.hackclub.com/api/hackatime/v1".to_string();
-                    }
+                // ── WakaTime ─────────────────────────────────────
+                egui::CollapsingHeader::new(
+                    egui::RichText::new("WakaTime").strong().size(16.0),
+                )
+                .default_open(false)
+                .show(ui, |ui| {
+                    ui.add_space(6.0);
+
+                    ui.label("API Key");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.wakatime.api_key)
+                            .password(true)
+                            .hint_text("waka_..."),
+                    );
+
+                    ui.add_space(6.0);
+                    ui.label("API URL");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.wakatime.api_url)
+                            .hint_text("https://api.wakatime.com/api/v1"),
+                    );
+
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Save WakaTime Settings").clicked() {
+                            let _ = wakatime::save(&self.wakatime);
+                        }
+
+                        if ui.button("Use Hackatime URL").clicked() {
+                            self.wakatime.api_url =
+                                "https://hackatime.hackclub.com/api/hackatime/v1".to_string();
+                        }
+                    });
                 });
             });
     }
@@ -880,15 +1051,23 @@ impl CatEditorApp {
         });
     }
 
-    fn indent_unit_from_line(base_indent: &str) -> &'static str {
+    fn indent_unit(base_indent: &str, prefs: &EditorPreferences) -> String {
+        // If the existing line uses tabs, keep using tabs
         if base_indent.contains('\t') {
-            "\t"
+            "\t".to_string()
         } else {
-            "    "
+            prefs.indent_unit()
         }
     }
 
-    fn compute_newline_indent(text: &str, cursor_pos: usize) -> Option<String> {
+    /// Computes the indentation to insert at cursor_pos after a newline.
+    /// Returns (text_to_insert, cursor_offset) where cursor_offset is how many
+    /// chars past cursor_pos the cursor should be placed.
+    fn compute_newline_indent(
+        text: &str,
+        cursor_pos: usize,
+        prefs: &EditorPreferences,
+    ) -> Option<(String, usize)> {
         if cursor_pos == 0 {
             return None;
         }
@@ -912,20 +1091,43 @@ impl CatEditorApp {
             .collect();
 
         let trimmed = prev_line.trim_end();
-        let should_indent_more = trimmed.ends_with('{')
+        let opens_block = trimmed.ends_with('{')
             || trimmed.ends_with('[')
             || trimmed.ends_with('(')
             || trimmed.ends_with(':');
 
-        let mut indent = base_indent;
-        if should_indent_more {
-            indent.push_str(Self::indent_unit_from_line(&indent));
-        }
+        let unit = Self::indent_unit(&base_indent, prefs);
 
-        if indent.is_empty() {
-            None
+        if opens_block {
+            let increased_indent = format!("{}{}", base_indent, unit);
+            let cursor_offset = increased_indent.len();
+
+            // Check if the char right after cursor is a matching closing bracket
+            // e.g. user pressed Enter between { and }
+            let next_char = chars.get(cursor_pos);
+            let is_bracket_pair = match (trimmed.chars().last(), next_char) {
+                (Some('{'), Some(&'}')) => true,
+                (Some('['), Some(&']')) => true,
+                (Some('('), Some(&')')) => true,
+                _ => false,
+            };
+
+            if is_bracket_pair {
+                // Split the bracket pair: insert increased indent, newline, base indent
+                // Result: {
+                //     |cursor
+                // }
+                let text_to_insert = format!("{}\n{}", increased_indent, base_indent);
+                Some((text_to_insert, cursor_offset))
+            } else {
+                Some((increased_indent, cursor_offset))
+            }
+        } else if !base_indent.is_empty() {
+            // Maintain current indentation level
+            let offset = base_indent.len();
+            Some((base_indent, offset))
         } else {
-            Some(indent)
+            None
         }
     }
 }
