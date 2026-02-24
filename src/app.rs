@@ -986,7 +986,7 @@ impl App {
                         let ext = tab.path.extension()
                             .and_then(|e| e.to_str())
                             .unwrap_or("");
-                        return create_editor(content, ext);
+                        return create_editor(content, ext, self.cursor_line);
                     }
                     TabKind::Preview { md_items } => {
                         return scrollable(
