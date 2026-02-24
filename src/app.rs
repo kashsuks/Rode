@@ -297,7 +297,7 @@ impl App {
             Message::SidebarResizing(x) => {
                 if self.resizing_sidebar {
                     if let Some(start_x) = self.resize_start_x {
-                        let delta = start_x - x;
+                        let delta = x - start_x;
                         self.sidebar_width = (self.resize_start_width + delta)
                             .clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
                     } else {
@@ -749,7 +749,7 @@ impl App {
         .style(editor_container_style);
 
         let editor_area = container(editor_container)
-            .padding(10)
+            .padding(2)
             .width(Length::Fill);
 
         let base_content: Element<'_, Message> = if self.sidebar_visible {
@@ -763,7 +763,7 @@ impl App {
             .on_press(Message::SidebarResizeStart)
             .interaction(iced::mouse::Interaction::ResizingHorizontally);
 
-            row![editor_area, resize_zone, sidebar].into()
+            row![sidebar, resize_zone, editor_area].into()
         } else {
             editor_area.into()
         };

@@ -1,5 +1,6 @@
 use iced::widget::{text, column, row, button, scrollable, container};
 use iced::widget::svg::{Svg, Handle};
+use iced::widget::image;
 use iced::{Element, Length};
 
 use crate::file_tree::{FileEntry, FileTree};
@@ -7,6 +8,21 @@ use crate::icons::{get_file_icon, get_folder_icon};
 use crate::message::Message;
 use crate::theme::*;
 use crate::ui::styles::{tree_button_style, sidebar_container_style};
+
+/// Create an icon element from a path, choosing Svg or Image widget based on extension.
+fn icon_widget<'a>(icon_path: &str) -> Element<'a, Message> {
+    if icon_path.ends_with(".png") {
+        image::Image::new(icon_path.to_string())
+            .width(Length::Fixed(ICON_SIZE))
+            .height(Length::Fixed(ICON_SIZE))
+            .into()
+    } else {
+        Svg::new(Handle::from_path(icon_path))
+            .width(Length::Fixed(ICON_SIZE))
+            .height(Length::Fixed(ICON_SIZE))
+            .into()
+    }
+}
 
 pub fn view_sidebar<'a>(file_tree: Option<&'a FileTree>, width: f32) -> Element<'a, Message> {
     let sidebar_content: Element<'a, Message> = match file_tree {
@@ -19,11 +35,11 @@ pub fn view_sidebar<'a>(file_tree: Option<&'a FileTree>, width: f32) -> Element<
     )
     .width(Length::Fixed(width))
     .height(Length::Fill)
-    .padding(10)
+    .padding(4)
     .style(sidebar_container_style);
 
     container(sidebar)
-        .padding(10)
+        .padding(0)
         .into()
 }
 
@@ -63,10 +79,7 @@ fn render_entries<'a>(
                 let is_expanded = tree.is_expanded(path);
                 let icon_path = get_folder_icon(name, is_expanded);
 
-                let icon: Element<'_, Message> = Svg::new(Handle::from_path(&icon_path))
-                    .width(Length::Fixed(ICON_SIZE))
-                    .height(Length::Fixed(ICON_SIZE))
-                    .into();
+                let icon: Element<'_, Message> = icon_widget(&icon_path);
 
                 let btn = button(
                     row![
@@ -91,10 +104,7 @@ fn render_entries<'a>(
             FileEntry::File { path, name } => {
                 let icon_path = get_file_icon(name);
 
-                let icon: Element<'_, Message> = Svg::new(Handle::from_path(&icon_path))
-                    .width(Length::Fixed(ICON_SIZE))
-                    .height(Length::Fixed(ICON_SIZE))
-                    .into();
+                let icon: Element<'_, Message> = icon_widget(&icon_path);
 
                 let btn = button(
                     row![
