@@ -86,7 +86,7 @@ pub fn save_preferences(prefs: &EditorPreferences) -> Result<(), std::io::Error>
         fs::create_dir_all(parent)?;
     }
     let content = format!(
-        r#"-- Whistler Editor Preferences
+        r#"-- Rode Editor Preferences
 -- Edit these values to customize your editor
 
 return {{

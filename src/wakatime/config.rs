@@ -19,7 +19,7 @@ impl Default for WakaTimeConfig {
 
 fn get_config_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".config").join("whistler")
+    PathBuf::from(home).join(".config").join("rode")
 }
 
 fn get_wakatime_path() -> PathBuf {

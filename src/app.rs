@@ -155,6 +155,20 @@ impl App {
                         let cursor = content.cursor();
                         self.cursor_line = cursor.position.line + 1;
                         self.cursor_col = cursor.position.column + 1;
+
+                        // WakaTime heartbeat on edit (throttled to every 2 minutes)
+                        let entity = tab.path.to_string_lossy().to_string();
+                        let should_send = match (&self.last_wakatime_entity, &self.last_wakatime_sent_at) {
+                            (Some(last_entity), Some(last_time)) => {
+                                &entity != last_entity || last_time.elapsed().as_secs() >= 120
+                            }
+                            _ => true,
+                        };
+                        if should_send {
+                            let _ = wakatime::client::send_heartbeat(&entity, false, &self.wakatime);
+                            self.last_wakatime_entity = Some(entity);
+                            self.last_wakatime_sent_at = Some(Instant::now());
+                        }
                         }
                     }
                 }
@@ -221,6 +235,12 @@ impl App {
                     self.recent_files.truncate(20);
                 }
 
+                // WakaTime heartbeat on file open
+                let entity = path.to_string_lossy().to_string();
+                let _ = wakatime::client::send_heartbeat(&entity, false, &self.wakatime);
+                self.last_wakatime_entity = Some(entity);
+                self.last_wakatime_sent_at = Some(Instant::now());
+
                 let name = path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
@@ -275,6 +295,12 @@ impl App {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
                         if let TabKind::Editor { ref content, .. } = tab.kind {
+                            // WakaTime heartbeat on save (is_write = true)
+                            let entity = tab.path.to_string_lossy().to_string();
+                            let _ = wakatime::client::send_heartbeat(&entity, true, &self.wakatime);
+                            self.last_wakatime_entity = Some(entity);
+                            self.last_wakatime_sent_at = Some(Instant::now());
+
                             let path = tab.path.clone();
                         let content = content.text();
                         return iced::Task::perform(

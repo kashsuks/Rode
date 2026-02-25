@@ -9,7 +9,7 @@ pub fn send_heartbeat(entity: &str, is_write: bool, cfg: &WakaTimeConfig) -> std
 
     let mut cmd = Command::new("wakatime-cli");
     cmd.arg("--entity").arg(entity);
-    cmd.arg("--plugin").arg("whistler/0.1.0");
+    cmd.arg("--plugin").arg("rode/0.1.0");
     cmd.arg("--key").arg(cfg.api_key.trim());
 
     if !cfg.api_url.trim().is_empty() {
