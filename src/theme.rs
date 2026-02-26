@@ -189,9 +189,9 @@ fn build_palette_syntax_theme() -> SynTheme {
 impl Default for ThemeColors {
     fn default() -> Self {
         Self {
-            bg_primary:         SURFACE_1,
+            bg_primary:         BG_MANTLE,
             bg_secondary:       BG_MANTLE,
-            bg_editor:          BG_BASE,
+            bg_editor:          Color::from_rgb(0.106, 0.106, 0.163),
             bg_tab_active:      SURFACE_1,
             bg_tab_inactive:    BG_MANTLE,
             bg_status_bar:      BG_MANTLE,
@@ -253,7 +253,7 @@ impl ThemeColors {
         );
 
         Self {
-            bg_primary: surface0, bg_secondary: mantle, bg_editor: base,
+            bg_primary: mantle, bg_secondary: mantle, bg_editor: base,
             bg_tab_active: surface0, bg_tab_inactive: mantle, bg_status_bar: mantle,
             bg_tab_bar: crust, bg_hover: surface1, bg_pressed: surface2, bg_drag_handle: surface0,
             text_primary: text_c, text_secondary: sub1, text_muted: sub0,

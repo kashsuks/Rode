@@ -18,8 +18,9 @@ use crate::file_tree::FileTree;
 use crate::theme::*;
 use crate::ui::{
     create_editor, editor_container_style, empty_editor, file_finder_item_style,
-    file_finder_panel_style, search_input_style, search_panel_style, status_bar_style,
-    tab_bar_style, tab_button_style, tab_close_button_style, tree_button_style, view_sidebar,
+    file_finder_panel_style, search_input_style, search_panel_style, sidebar_editor_separator_style,
+    status_bar_style, tab_bar_style, tab_button_style, tab_close_button_style, tree_button_style,
+    view_sidebar,
 };
 
 #[derive(Debug)]
@@ -887,15 +888,20 @@ impl App {
         let base_content: Element<'_, Message> = if self.sidebar_visible {
             let sidebar = view_sidebar(self.file_tree.as_ref(), self.sidebar_width);
 
+            let separator = container(text(""))
+                .width(Length::Fixed(1.0))
+                .height(Length::Fill)
+                .style(sidebar_editor_separator_style);
+
             let resize_zone = mouse_area(
                 container(text(""))
-                    .width(Length::Fixed(RESIZE_HIT_WIDTH))
+                    .width(Length::Fixed(4.0))
                     .height(Length::Fill)
             )
             .on_press(Message::SidebarResizeStart)
             .interaction(iced::mouse::Interaction::ResizingHorizontally);
 
-            row![sidebar, resize_zone, editor_area].into()
+            row![sidebar, separator, resize_zone, editor_area].into()
         } else {
             editor_area.into()
         };

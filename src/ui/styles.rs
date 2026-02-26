@@ -71,36 +71,32 @@ pub fn tab_close_button_style(_theme: &Theme, _status: ButtonStatus) -> ButtonSt
 
 pub fn editor_container_style(_theme: &Theme) -> container::Style {
     let t = theme();
-    let border_color = Color::from_rgba(
-        1.0 - t.bg_editor.r * 0.7,
-        1.0 - t.bg_editor.g * 0.7,
-        1.0 - t.bg_editor.b * 0.7,
-        0.12,
-    );
     container::Style {
         background: Some(Background::Color(t.bg_primary)),
         border: Border {
-            color: border_color,
-            width: 1.0,
+            color: Color::TRANSPARENT,
+            width: 0.0,
             radius: 0.0.into(),
         },
         ..Default::default()
     }
 }
 
+pub fn sidebar_editor_separator_style(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(theme().border_subtle)),
+        border: Border::default(),
+        ..Default::default()
+    }
+}
+
 pub fn sidebar_container_style(_theme: &Theme) -> container::Style {
     let t = theme();
-    let border_color = Color::from_rgba(
-        1.0 - t.bg_secondary.r * 0.7,
-        1.0 - t.bg_secondary.g * 0.7,
-        1.0 - t.bg_secondary.b * 0.7,
-        0.12,
-    );
     container::Style {
         background: Some(Background::Color(t.bg_secondary)),
         border: Border {
-            color: border_color,
-            width: 1.0,
+            color: Color::TRANSPARENT,
+            width: 0.0,
             radius: 0.0.into(),
         },
         ..Default::default()
@@ -115,7 +111,7 @@ pub fn status_bar_style(_theme: &Theme) -> container::Style {
         border: Border {
             color: theme().border_very_subtle,
             width: 0.0,
-            radius: Radius { top_left: 0.0, top_right: 0.0, bottom_right: BORDER_RADIUS, bottom_left: BORDER_RADIUS },
+            radius: Radius { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 },
         },
         ..Default::default()
     }
@@ -127,7 +123,7 @@ pub fn tab_bar_style(_theme: &Theme) -> container::Style {
         border: Border {
             color: Color::TRANSPARENT,
             width: 0.0,
-            radius: Radius { top_left: BORDER_RADIUS, top_right: BORDER_RADIUS, bottom_right: 0.0, bottom_left: 0.0 },
+            radius: Radius { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 },
         },
         ..Default::default()
     }
