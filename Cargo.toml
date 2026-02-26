@@ -1,6 +1,6 @@
 [package]
 name = "rode-editor"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 authors = ["Kashyap Sukshavas"]
 description = "A lightweight editor built with rust"
