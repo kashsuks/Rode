@@ -28,6 +28,7 @@ pub enum TabKind {
     Editor {
         content: Content,
         modified: bool,
+        scroll_line: usize,
     },
     Preview {
         md_items: Vec<markdown::Item>,
@@ -148,16 +149,36 @@ impl App {
             Message::EditorAction(action) => { // This one records a keystroke in the editor
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get_mut(idx) {
-                        if let TabKind::Editor { ref mut content, ref mut modified } = tab.kind {
+                        if let TabKind::Editor { ref mut content, ref mut modified, ref mut scroll_line } = tab.kind {
                             let action = match action {
                             Action::Scroll { lines } => Action::Scroll { lines: lines / 5},
                             other => other,
                         };
+                        if let Action::Scroll { lines } = &action {
+                            const VIEWPORT_LINES: usize = 60;
+                            let total_lines = content.line_count().max(1);
+                            let max_start = total_lines.saturating_sub(VIEWPORT_LINES - 1).max(1);
+                            let next = if *lines > 0 {
+                                scroll_line.saturating_add(*lines as usize)
+                            } else {
+                                scroll_line.saturating_sub(lines.unsigned_abs() as usize)
+                            };
+                            *scroll_line = next.clamp(1, max_start);
+                        }
                         let _ = content.perform(action);
                         *modified = true;
                         let cursor = content.cursor();
                         self.cursor_line = cursor.position.line + 1;
                         self.cursor_col = cursor.position.column + 1;
+                        const VIEWPORT_LINES: usize = 60;
+                        if self.cursor_line < *scroll_line {
+                            *scroll_line = self.cursor_line;
+                        } else {
+                            let bottom = scroll_line.saturating_add(VIEWPORT_LINES - 1);
+                            if self.cursor_line > bottom {
+                                *scroll_line = self.cursor_line.saturating_sub(VIEWPORT_LINES - 1);
+                            }
+                        }
 
                         // WakaTime heartbeat on edit (throttled to every 2 minutes)
                         let entity = tab.path.to_string_lossy().to_string();
@@ -254,6 +275,7 @@ impl App {
                     kind: TabKind::Editor {
                         content: Content::with_text(&content),
                         modified: false,
+                        scroll_line: 1,
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
@@ -262,6 +284,13 @@ impl App {
             Message::TabSelected(idx) => {
                 if idx < self.tabs.len() {
                     self.active_tab = Some(idx);
+                    if let Some(tab) = self.tabs.get(idx) {
+                        if let TabKind::Editor { ref content, .. } = tab.kind {
+                            let cursor = content.cursor();
+                            self.cursor_line = cursor.position.line + 1;
+                            self.cursor_col = cursor.position.column + 1;
+                        }
+                    }
                 }
                 iced::Task::none()
             }
@@ -669,7 +698,7 @@ impl App {
             Message::ReplaceOne => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor { ref content, .. } = tab.kind {
+                        if let TabKind::Editor { ref content, scroll_line, .. } = tab.kind {
                             let mut text = content.text();
                             self.find_replace.replace_next(&mut text);
                             // Re-create content with modified text
@@ -681,6 +710,7 @@ impl App {
                                 kind: TabKind::Editor {
                                     content: Content::with_text(&text),
                                     modified: true,
+                                    scroll_line,
                                 },
                             };
                         }
@@ -692,7 +722,7 @@ impl App {
             Message::ReplaceAll => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor { ref content, .. } = tab.kind {
+                        if let TabKind::Editor { ref content, scroll_line, .. } = tab.kind {
                             let mut text = content.text();
                             self.find_replace.replace_all(&mut text);
                             let path = tab.path.clone();
@@ -703,6 +733,7 @@ impl App {
                                 kind: TabKind::Editor {
                                     content: Content::with_text(&text),
                                     modified: true,
+                                    scroll_line,
                                 },
                             };
                         }
@@ -805,6 +836,7 @@ impl App {
                     kind: TabKind::Editor {
                         content: Content::with_text(""),
                         modified: false,
+                        scroll_line: 1,
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
@@ -1120,11 +1152,11 @@ impl App {
         if let Some(idx) = self.active_tab {
             if let Some(tab) = self.tabs.get(idx) {
                 match &tab.kind {
-                    TabKind::Editor { content, .. } => {
+                    TabKind::Editor { content, scroll_line, .. } => {
                         let ext = tab.path.extension()
                             .and_then(|e| e.to_str())
                             .unwrap_or("");
-                        return create_editor(content, ext, self.cursor_line);
+                        return create_editor(content, ext, self.cursor_line, *scroll_line);
                     }
                     TabKind::Preview { md_items } => {
                         return scrollable(
@@ -1226,6 +1258,7 @@ impl App {
                     kind: TabKind::Editor {
                         content: Content::with_text(""),
                         modified: false,
+                        scroll_line: 1,
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
