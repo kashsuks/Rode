@@ -27,7 +27,7 @@ tree-sitter-javascript = "0.23"
 tree-sitter-typescript = "0.23"
 tree-sitter-python = "0.23"
 
-iced = { version = "0.14.0", features = ["svg", "image", "advanced", "markdown"] }
+iced = { version = "0.14.0", features = ["svg", "image", "advanced", "markdown", "tokio"] }
 syntect = { version = "5", default-features = false, features = ["default-syntaxes", "regex-onig"] }
 rfd = "0.15"
 serde = { version = "1.0", features = ["derive"] }
