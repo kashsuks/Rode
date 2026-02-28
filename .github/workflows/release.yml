@@ -6,8 +6,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Minimum macOS version for all Apple builds
+  MACOSX_DEPLOYMENT_TARGET: "12.0"
 
 jobs:
+
   check-version:
     runs-on: ubuntu-latest
     outputs:
@@ -15,24 +18,26 @@ jobs:
       version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Check version and release status
         id: check
         run: |
-          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml)
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
           echo "version=$version" >> $GITHUB_OUTPUT
-          
-          latest_release=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
-            grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/' || echo "none")
-          
+
+          latest_release=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+            | grep '"tag_name":' \
+            | sed -E 's/.*"v([^"]+)".*/\1/' || echo "none")
+
           if [ "$latest_release" != "$version" ]; then
             echo "should_release=true" >> $GITHUB_OUTPUT
           else
             echo "should_release=false" >> $GITHUB_OUTPUT
           fi
 
-  build-and-release:
+  build-linux-windows:
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
     permissions:
@@ -47,9 +52,6 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             asset_suffix: windows-x86_64.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            asset_suffix: macos-x86_64
 
     steps:
       - uses: actions/checkout@v4
@@ -68,20 +70,255 @@ jobs:
           binary_name=$(sed -n 's/^name = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
           cd target/${{ matrix.target }}/release
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp ${binary_name}.exe ../../${binary_name}-${{ matrix.asset_suffix }}
+            cp ${binary_name}.exe ../../../${binary_name}-${{ matrix.asset_suffix }}
           else
-            cp ${binary_name} ../../${binary_name}-${{ matrix.asset_suffix }}
+            cp ${binary_name} ../../../${binary_name}-${{ matrix.asset_suffix }}
           fi
 
-      - name: Upload to release
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.asset_suffix }}
+          path: rode-editor-${{ matrix.asset_suffix }}
+          retention-days: 1
+
+  build-macos:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: macos-latest   # macos-14, Apple Silicon (M1)
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust with both macOS targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Build aarch64 (Apple Silicon)
+        env:
+          SDKROOT: ${{ steps.sdk.outputs.sdk_path }}
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+
+      # Cross-compiling x86_64 from the ARM runner requires the correct SDK
+      # root so C dependencies (resvg, tiny-skia, syntect/onig) compile cleanly.
+      - name: Locate macOS SDK
+        id: sdk
+        run: |
+          sdk_path=$(xcrun --sdk macosx --show-sdk-path)
+          echo "sdk_path=$sdk_path" >> $GITHUB_OUTPUT
+
+      - name: Build x86_64 (Intel)
+        env:
+          SDKROOT: ${{ steps.sdk.outputs.sdk_path }}
+          # Tell the C compiler to target x86_64 when building native deps
+          CFLAGS: "-target x86_64-apple-macos12.0"
+          CXXFLAGS: "-target x86_64-apple-macos12.0"
+        run: |
+          cargo build --release --target x86_64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          binary_name=$(sed -n 's/^name = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+          mkdir -p universal
+
+          lipo -create \
+            target/aarch64-apple-darwin/release/${binary_name} \
+            target/x86_64-apple-darwin/release/${binary_name} \
+            -output universal/${binary_name}
+
+          # Confirm lipo worked — should print both architectures
+          lipo -info universal/${binary_name}
+
+      - name: Assemble .app bundle
+        run: |
+          binary_name=$(sed -n 's/^name = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+          app_name="Rode"
+          bundle="${app_name}.app"
+
+          mkdir -p "${bundle}/Contents/MacOS"
+          mkdir -p "${bundle}/Contents/Resources"
+
+          # Copy universal binary
+          cp universal/${binary_name} "${bundle}/Contents/MacOS/${binary_name}"
+          chmod +x "${bundle}/Contents/MacOS/${binary_name}"
+
+          # Stamp the version from Cargo.toml into Info.plist
+          sed "s/__BUNDLE_VERSION__/${VERSION}/g" \
+            assets/macos/Info.plist > "${bundle}/Contents/Info.plist"
+
+          # Copy icon if it exists (add your .icns file to assets/macos/ later)
+          if [ -f "assets/macos/AppIcon.icns" ]; then
+            cp assets/macos/AppIcon.icns "${bundle}/Contents/Resources/AppIcon.icns"
+            # Add icon key to Info.plist
+            /usr/libexec/PlistBuddy -c \
+              "Add :CFBundleIconFile string AppIcon" \
+              "${bundle}/Contents/Info.plist" 2>/dev/null || true
+          fi
+
+          echo "Bundle contents:"
+          find "${bundle}" -type f
+
+      - name: Create tar.gz archive
+        run: |
+          app_name="Rode"
+          tar -czf rode-editor-${VERSION}-macos-universal.tar.gz "${app_name}.app"
+          echo "tar.gz size: $(du -sh rode-editor-${VERSION}-macos-universal.tar.gz | cut -f1)"
+
+      - name: Create .dmg
+        run: |
+          app_name="Rode"
+          dmg_name="rode-editor-${VERSION}-macos-universal.dmg"
+
+          # Intermediate read-write DMG
+          hdiutil create \
+            -volname "Rode" \
+            -srcfolder "${app_name}.app" \
+            -ov \
+            -format UDRW \
+            rode-rw.dmg
+
+          # Mount it so we can customise the window layout
+          device=$(hdiutil attach -readwrite -noverify rode-rw.dmg \
+            | grep "^/dev/" | head -n1 | awk '{print $1}')
+
+          # Create a symlink to /Applications inside the DMG
+          ln -sf /Applications "/Volumes/Rode/Applications"
+
+          # ── DMG window appearance ──────────────────────────────────────
+          # Set icon positions and window bounds via AppleScript.
+          # Add your background image to assets/macos/dmg-background.png
+          # and uncomment the set background picture line when ready.
+          osascript << APPLESCRIPT
+          tell application "Finder"
+            tell disk "Rode"
+              open
+              set current view of container window to icon view
+              set toolbar visible of container window to false
+              set statusbar visible of container window to false
+              set bounds of container window to {400, 100, 940, 480}
+              set viewOptions to the icon view options of container window
+              set arrangement of viewOptions to not arranged
+              set icon size of viewOptions to 128
+              -- Uncomment when you have a background image:
+              -- set background picture of viewOptions to file ".background:dmg-background.png"
+              set position of item "${app_name}.app" of container window to {130, 180}
+              set position of item "Applications" of container window to {410, 180}
+              close
+              open
+              update without registering applications
+              delay 2
+            end tell
+          end tell
+          APPLESCRIPT
+
+          # Unmount
+          hdiutil detach "${device}"
+
+          # Convert to compressed read-only DMG
+          hdiutil convert rode-rw.dmg \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            -o "${dmg_name}"
+
+          rm rode-rw.dmg
+
+          echo "DMG size: $(du -sh ${dmg_name} | cut -f1)"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-macos-universal
+          path: |
+            rode-editor-${{ env.VERSION }}-macos-universal.dmg
+            rode-editor-${{ env.VERSION }}-macos-universal.tar.gz
+          retention-days: 1
+
+  create-release:
+    needs: [check-version, build-linux-windows, build-macos]
+    if: needs.check-version.outputs.should_release == 'true'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts/ -type f | sort
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: target/*-${{ matrix.asset_suffix }}
-          tag_name: v${{ needs.check-version.outputs.version }}
+          tag_name: v${{ env.VERSION }}
+          name: Rode v${{ env.VERSION }}
           body: |
-            Release v${{ needs.check-version.outputs.version }}
+            ## Rode v${{ env.VERSION }}
+
+            ### Downloads
+            | Platform | File |
+            |---|---|
+            | macOS (Universal — Intel + Apple Silicon) | `rode-editor-${{ env.VERSION }}-macos-universal.dmg` |
+            | Linux x86_64 | `rode-editor-linux-x86_64` |
+            | Windows x86_64 | `rode-editor-windows-x86_64.exe` |
+
+            ### macOS note
+            This build is not yet code-signed. On first launch, right-click the app and choose **Open** to bypass Gatekeeper.
+
+            ### Checksums
+            SHA256 checksums are available in `checksums.txt`.
+
             Commit: ${{ github.sha }}
+          files: |
+            artifacts/rode-editor-${{ env.VERSION }}-macos-universal.dmg
+            artifacts/rode-editor-${{ env.VERSION }}-macos-universal.tar.gz
+            artifacts/rode-editor-linux-x86_64
+            artifacts/rode-editor-windows-x86_64.exe
+            artifacts/checksums.txt
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  generate-checksums:
+    needs: [check-version, build-linux-windows, build-macos]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd artifacts
+          sha256sum \
+            rode-editor-${VERSION}-macos-universal.dmg \
+            rode-editor-${VERSION}-macos-universal.tar.gz \
+            rode-editor-linux-x86_64 \
+            rode-editor-windows-x86_64.exe \
+            > checksums.txt
+          cat checksums.txt
+
+      - name: Upload checksums artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: artifacts/checksums.txt
+          retention-days: 1
 
   publish-crate:
     needs: check-version
@@ -92,7 +329,7 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        
+
       - name: Publish to crates.io
         run: |
           cargo login ${{ secrets.CRATES_IO }}
@@ -100,7 +337,7 @@ jobs:
           rm -f ~/.cargo/credentials
 
   update-aur:
-    needs: [check-version, build-and-release]
+    needs: [check-version, create-release]
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -137,7 +374,7 @@ jobs:
 
           package() {
               cd "$srcdir/Rode-$pkgver"
-              install -Dm755 "target/release/rode" "$pkgdir/usr/bin/rode"
+              install -Dm755 "target/release/rode-editor" "$pkgdir/usr/bin/rode"
           }
           EOF
 
@@ -156,7 +393,7 @@ jobs:
           depends=()
           provides=('rode')
           conflicts=('rode')
-          source=("rode-$pkgver::https://github.com/kashsuks/Rode/releases/download/v$pkgver/rode-linux-x86_64")
+          source=("rode-$pkgver::https://github.com/kashsuks/Rode/releases/download/v$pkgver/rode-editor-linux-x86_64")
           sha256sums=('SKIP')
 
           package() {
@@ -173,4 +410,3 @@ jobs:
           commit_email: ksukshavasi@gmail.com
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: Update to ${{ needs.check-version.outputs.version }}
-

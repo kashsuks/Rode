@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.kashsuks.rode</string>
+
+    <key>CFBundleName</key>
+    <string>Rode</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Rode</string>
+
+    <key>CFBundleExecutable</key>
+    <string>rode-editor</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleSignature</key>
+    <string>????</string>
+
+    <!-- Pulled from Cargo.toml by the CI build step and written here -->
+    <key>CFBundleShortVersionString</key>
+    <string>__BUNDLE_VERSION__</string>
+
+    <key>CFBundleVersion</key>
+    <string>__BUNDLE_VERSION__</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+
+    <!-- Declare supported CPU architectures for the universal binary -->
+    <key>LSArchitecturePriority</key>
+    <array>
+        <string>arm64</string>
+        <string>x86_64</string>
+    </array>
+
+    <!-- Allows the app to appear in Launchpad and Spotlight -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
+
+    <!-- High-resolution display support -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Suppress the automatic tabbing behaviour macOS adds to NSWindows -->
+    <key>NSWindowTabbing</key>
+    <string>disallowed</string>
+
+    <!-- File associations: plain text files -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Plain Text</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.plain-text</string>
+                <string>public.source-code</string>
+                <string>public.shell-script</string>
+            </array>
+        </dict>
+    </dict>
+
+    <!-- Allow opening files passed via the Finder / CLI -->
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+
+    <!-- Hardened runtime placeholders                          -->
+    <!-- Enable these when you get an Apple Developer account: -->
+    <!--
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <false/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <false/>
+    -->
+</dict>
+</plist>
