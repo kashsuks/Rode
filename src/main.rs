@@ -16,17 +16,17 @@ mod syntax;
 mod terminal;
 mod theme;
 mod ui;
+mod updater;
 mod wakatime;
 
 const FIRA_CODE: &[u8] = include_bytes!("assets/fonts/FiraCode-Regular.ttf");
 
 fn main() -> iced::Result {
     let icon_data = include_bytes!("assets/icon.png");
-    let icon = window::icon::from_file_data(
-        icon_data, None)
+    let icon = window::icon::from_file_data(icon_data, None)
         .expect("Failed to load icon.");
 
-    iced::application(app::App::default, app::App::update, app::App::view)
+    iced::application(app::App::new, app::App::update, app::App::view)
         .title("Rode")
         .subscription(|app| app.subscription())
         .font(FIRA_CODE)
@@ -35,7 +35,7 @@ fn main() -> iced::Result {
             ..iced::Font::DEFAULT
         })
         .window_size((1200.0, 800.0))
-        .window(window::Settings{
+        .window(window::Settings {
             size: [1200.0, 800.0].into(),
             icon: Some(icon),
             ..Default::default()

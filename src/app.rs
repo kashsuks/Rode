@@ -16,6 +16,7 @@ use crate::wakatime::{self, WakaTimeConfig};
 use crate::message::Message;
 use crate::file_tree::FileTree;
 use crate::theme::*;
+use crate::updater::UpdateInfo;
 use crate::ui::{
     create_editor, editor_container_style, empty_editor, file_finder_item_style,
     file_finder_panel_style, search_input_style, search_panel_style, sidebar_editor_separator_style,
@@ -103,13 +104,14 @@ pub struct App {
     last_wakatime_sent_at: Option<Instant>,
     // Notification
     notification: Option<Notification>,
+    // Updater
+    update_banner: Option<UpdateInfo>,
 }
 
 impl Default for App {
     fn default() -> Self {
         let editor_preferences = prefs::load_preferences();
 
-        // Apply saved theme on startup
         let active_theme_name = {
             let name = &editor_preferences.theme_name;
             if name == "Custom (theme.lua)" {
@@ -125,7 +127,6 @@ impl Default for App {
                     crate::theme::set_theme(t);
                     theme_name.to_string()
                 } else {
-                    // Default / unknown → Catppuccin Mocha (already set by ThemeColors::default)
                     "Catppuccin Mocha".to_string()
                 }
             }
@@ -172,11 +173,25 @@ impl Default for App {
             last_wakatime_entity: None,
             last_wakatime_sent_at: None,
             notification: None,
+            update_banner: None,
         }
     }
 }
 
 impl App {
+    /// Constructor used by main.rs — fires the update check immediately on startup.
+    pub fn new() -> (Self, iced::Task<Message>) {
+        let app = Self::default();
+        let task = iced::Task::perform(
+            crate::updater::check_for_update(),
+            |result| match result {
+                Some(info) => Message::UpdateAvailable(info),
+                None => Message::DismissUpdateBanner,
+            },
+        );
+        (app, task)
+    }
+
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
             Message::EditorAction(action) => {
@@ -778,7 +793,6 @@ impl App {
                 self.active_theme_name = name.clone();
                 self.editor_preferences.theme_name = name;
                 self.theme_dropdown_open = false;
-                // Auto-save preference when theme is changed
                 let _ = prefs::save_preferences(&self.editor_preferences);
                 iced::Task::none()
             }
@@ -857,6 +871,23 @@ impl App {
             }
             Message::DismissNotification => {
                 self.notification = None;
+                iced::Task::none()
+            }
+            Message::CheckForUpdate => {
+                iced::Task::perform(
+                    crate::updater::check_for_update(),
+                    |result| match result {
+                        Some(info) => Message::UpdateAvailable(info),
+                        None => Message::DismissUpdateBanner,
+                    },
+                )
+            }
+            Message::UpdateAvailable(info) => {
+                self.update_banner = Some(info);
+                iced::Task::none()
+            }
+            Message::DismissUpdateBanner => {
+                self.update_banner = None;
                 iced::Task::none()
             }
         }
@@ -943,10 +974,16 @@ impl App {
             wrapped.into()
         };
 
-        if self.notification.is_some() {
+        let with_notification: Element<'_, Message> = if self.notification.is_some() {
             stack![base_view, self.view_notification_toast()].into()
         } else {
             base_view
+        };
+
+        if self.update_banner.is_some() {
+            stack![with_notification, self.view_update_banner()].into()
+        } else {
+            with_notification
         }
     }
 
@@ -1336,6 +1373,83 @@ impl App {
         .into()
     }
 
+    fn view_update_banner(&self) -> Element<'_, Message> {
+        use iced::widget::stack;
+
+        let Some(info) = &self.update_banner else {
+            return iced::widget::Space::new().into();
+        };
+
+        let label = text(format!("Rode {} is available", info.version))
+            .size(13)
+            .color(Color::from_rgb(0.85, 0.93, 1.0));
+
+        let open_btn = button(
+            text("Open release page →").size(12).color(Color::from_rgb(0.55, 0.75, 1.0))
+        )
+        .on_press(Message::DismissUpdateBanner)
+        .style(|_theme, _status| button::Style {
+            background: Some(Background::Color(Color::from_rgba(0.30, 0.55, 1.0, 0.15))),
+            border: iced::Border {
+                color: Color::from_rgba(0.40, 0.65, 1.0, 0.35),
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            text_color: Color::from_rgb(0.55, 0.75, 1.0),
+            ..Default::default()
+        })
+        .padding(iced::Padding { top: 5.0, right: 12.0, bottom: 5.0, left: 12.0 });
+
+        let dismiss_btn = button(
+            text("×").size(14).color(Color::from_rgba(0.65, 0.80, 1.0, 0.7))
+        )
+        .on_press(Message::DismissUpdateBanner)
+        .style(|_theme, _status| button::Style {
+            background: None,
+            border: iced::Border::default(),
+            text_color: Color::from_rgba(0.65, 0.80, 1.0, 0.7),
+            ..Default::default()
+        })
+        .padding(iced::Padding { top: 0.0, right: 4.0, bottom: 0.0, left: 8.0 });
+
+        let banner_inner = row![label, open_btn, dismiss_btn]
+            .spacing(12)
+            .align_y(iced::Alignment::Center);
+
+        let banner = container(banner_inner)
+            .padding(iced::Padding { top: 10.0, right: 16.0, bottom: 10.0, left: 16.0 })
+            .style(|_theme| container::Style {
+                background: Some(Background::Color(Color::from_rgba(0.05, 0.10, 0.25, 0.96))),
+                border: iced::Border {
+                    color: Color::from_rgba(0.35, 0.55, 1.0, 0.40),
+                    width: 1.0,
+                    radius: 12.0.into(),
+                },
+                shadow: iced::Shadow {
+                    color: Color::from_rgba(0.0, 0.0, 0.0, 0.55),
+                    offset: iced::Vector::new(0.0, 8.0),
+                    blur_radius: 32.0,
+                },
+                ..Default::default()
+            });
+
+        container(
+            column![
+                iced::widget::Space::new().height(Length::Fill),
+                container(banner).padding(iced::Padding {
+                    top: 0.0,
+                    right: 20.0,
+                    bottom: 40.0,
+                    left: 0.0,
+                }),
+            ]
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_right(Length::Fill)
+        .into()
+    }
+
     fn view_command_palette_overlay(&self) -> Element<'_, Message> {
         use iced::widget::{stack, center, Space, opaque};
 
@@ -1664,7 +1778,6 @@ impl App {
                 ..Default::default()
             });
 
-        // Tab size
         let tab_size_row = row![
             column![
                 text("Tab Size").size(13).color(theme().text_muted),
@@ -1680,7 +1793,6 @@ impl App {
         .spacing(16)
         .align_y(iced::Alignment::Center);
 
-        // Use spaces
         let spaces_label = if self.editor_preferences.use_spaces { "Spaces" } else { "Tabs" };
         let spaces_row = row![
             column![
@@ -1704,7 +1816,6 @@ impl App {
         .spacing(16)
         .align_y(iced::Alignment::Center);
 
-        // Theme dropdown
         let all_themes: Vec<&str> = {
             let mut v: Vec<&str> = BUILTIN_THEMES.to_vec();
             v.push("Custom (theme.lua)");
@@ -1785,7 +1896,6 @@ impl App {
         .spacing(16)
         .align_y(iced::Alignment::Start);
 
-        // Save button
         let save_btn = button(text("Save Preferences").size(12).color(theme().text_primary))
             .on_press(Message::SettingsSavePreferences)
             .style(|_theme, _status| button::Style {

@@ -81,4 +81,9 @@ pub enum Message {
     SaveWakaTimeSettings,
 
     DismissNotification,
+
+    // Updater
+    CheckForUpdate,
+    UpdateAvailable(crate::updater::UpdateInfo),
+    DismissUpdateBanner,
 }
