@@ -6,7 +6,6 @@ use crate::search::SearchResult;
 pub enum Message {
     /// Text editing stuff
     EditorAction(Action),
-    /// Filesystem stuff
     FileClicked(PathBuf),
     FileOpened(PathBuf, String),
     FolderToggled(PathBuf),
@@ -16,18 +15,18 @@ pub enum Message {
     FolderOpened(PathBuf),
     SaveFile,
     FileSaved(Result<(), String>),
-    /// Tab stuff
+
     TabSelected(usize),
     TabClosed(usize),
     CloseActiveTab,
-    /// Sidebar stuff
+
     SidebarResizeStart,
     SidebarResizing(f32),
     SidebarResizeEnd,
-    /// Markdown preview and other md stuff
+
     PreviewMarkdown,
     MarkdownLinkClicked(iced::widget::markdown::Uri),
-    /// Searching stuff
+
     ToggleSearch,
     SearchQueryChanged(String),
     SearchCompleted(Vec<SearchResult>),
@@ -80,4 +79,6 @@ pub enum Message {
     WakaTimeApiKeyChanged(String),
     WakaTimeApiUrlChanged(String),
     SaveWakaTimeSettings,
+
+    DismissNotification,
 }

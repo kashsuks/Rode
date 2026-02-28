@@ -42,6 +42,12 @@ pub struct Tab {
     pub kind: TabKind,
 }
 
+#[derive(Debug, Clone)]
+pub struct Notification {
+    pub message: String,
+    pub shown_at: Instant,
+}
+
 pub struct App {
     // Tabs
     tabs: Vec<Tab>,
@@ -90,14 +96,41 @@ pub struct App {
     // Editor Preferences
     editor_preferences: EditorPreferences,
     active_theme_name: String,
+    theme_dropdown_open: bool,
     // WakaTime
     wakatime: WakaTimeConfig,
     last_wakatime_entity: Option<String>,
     last_wakatime_sent_at: Option<Instant>,
+    // Notification
+    notification: Option<Notification>,
 }
 
 impl Default for App {
     fn default() -> Self {
+        let editor_preferences = prefs::load_preferences();
+
+        // Apply saved theme on startup
+        let active_theme_name = {
+            let name = &editor_preferences.theme_name;
+            if name == "Custom (theme.lua)" {
+                use crate::config::theme_manager;
+                let lua_theme = theme_manager::load_theme();
+                let t = crate::theme::ThemeColors::from_lua_theme(&lua_theme);
+                crate::theme::set_theme(t);
+                "Custom (theme.lua)".to_string()
+            } else {
+                let found = crate::theme::BUILTIN_THEMES.iter().find(|&&t| t == name.as_str());
+                if let Some(&theme_name) = found {
+                    let t = crate::theme::builtin_theme(theme_name);
+                    crate::theme::set_theme(t);
+                    theme_name.to_string()
+                } else {
+                    // Default / unknown → Catppuccin Mocha (already set by ThemeColors::default)
+                    "Catppuccin Mocha".to_string()
+                }
+            }
+        };
+
         Self {
             tabs: Vec::new(),
             active_tab: None,
@@ -132,11 +165,13 @@ impl Default for App {
             command_input_id: iced::widget::Id::unique(),
             settings_open: false,
             settings_section: "general".to_string(),
-            editor_preferences: prefs::load_preferences(),
-            active_theme_name: "Catppuccin Mocha".to_string(),
+            editor_preferences,
+            active_theme_name,
+            theme_dropdown_open: false,
             wakatime: wakatime::load(),
             last_wakatime_entity: None,
             last_wakatime_sent_at: None,
+            notification: None,
         }
     }
 }
@@ -144,9 +179,7 @@ impl Default for App {
 impl App {
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
-            // The below section basically just creates "instances" for each message,
-            // declaring the actual action that each of them does.
-            Message::EditorAction(action) => { // This one records a keystroke in the editor
+            Message::EditorAction(action) => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor { ref mut content, ref mut modified, ref mut scroll_line } = tab.kind {
@@ -180,7 +213,6 @@ impl App {
                             }
                         }
 
-                        // WakaTime heartbeat on edit (throttled to every 2 minutes)
                         let entity = tab.path.to_string_lossy().to_string();
                         let should_send = match (&self.last_wakatime_entity, &self.last_wakatime_sent_at) {
                             (Some(last_entity), Some(last_time)) => {
@@ -198,19 +230,18 @@ impl App {
                 }
                 iced::Task::none()
             }
-            Message::FolderToggled(path) => { // Checks if a folder was clicked
+            Message::FolderToggled(path) => {
                 if let Some(ref mut tree) = self.file_tree {
                     tree.toggle_folder(&path);
                 }
                 iced::Task::none()
             }
-            Message::FileClicked(path) => { // Checks if a file was clicked
-                // Close fuzzy finder if open
+            Message::FileClicked(path) => {
                 if self.fuzzy_finder.open {
                     self.fuzzy_finder.close();
                 }
                 if let Some(ref mut tree) = self.file_tree {
-                    tree.select(path.clone()); // Opens the file
+                    tree.select(path.clone());
                 }
                 if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
                     self.active_tab = Some(idx);
@@ -220,17 +251,16 @@ impl App {
                     async move {
                         let content = std::fs::read_to_string(&path)
                             .unwrap_or_else(|_| String::from("Could not read file"));
-                        (path, content) // Error handling if it is a file that the editor cannot read,
-                                        // e.g. image or .pkl (for now)
+                        (path, content)
                     },
                     |(path, content)| Message::FileOpened(path, content)
                 )
             }
-            Message::TabClosed(idx) => {  // To close a tab using the "x" button
+            Message::TabClosed(idx) => {
                 if idx < self.tabs.len() {
-                    self.tabs.remove(idx); // Just removes a tab at that index
+                    self.tabs.remove(idx);
                     if self.tabs.is_empty() {
-                        self.active_tab = None; // Avoid errors by setting active tab to none if none exist
+                        self.active_tab = None;
                     } else if let Some(active) = self.active_tab {
                         if active >= self.tabs.len() {
                             self.active_tab = Some(self.tabs.len() - 1);
@@ -241,11 +271,11 @@ impl App {
                 }
                 iced::Task::none()
             }
-            Message::CloseActiveTab => { // Closes only the active tab (this is only used once in the code for the keyboard shortcut)
+            Message::CloseActiveTab => {
                 if let Some(idx) = self.active_tab {
                     self.tabs.remove(idx);
                     if self.tabs.is_empty() {
-                        self.active_tab = None; // If there are no tabs, set active tab to none to avoid errors
+                        self.active_tab = None;
                     } else if idx >= self.tabs.len() {
                         self.active_tab = Some(self.tabs.len() - 1);
                     }
@@ -259,7 +289,6 @@ impl App {
                     self.recent_files.truncate(20);
                 }
 
-                // WakaTime heartbeat on file open
                 let entity = path.to_string_lossy().to_string();
                 let _ = wakatime::client::send_heartbeat(&entity, false, &self.wakatime);
                 self.last_wakatime_entity = Some(entity);
@@ -327,32 +356,30 @@ impl App {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
                         if let TabKind::Editor { ref content, .. } = tab.kind {
-                            // WakaTime heartbeat on save (is_write = true)
                             let entity = tab.path.to_string_lossy().to_string();
                             let _ = wakatime::client::send_heartbeat(&entity, true, &self.wakatime);
                             self.last_wakatime_entity = Some(entity);
                             self.last_wakatime_sent_at = Some(Instant::now());
 
                             let path = tab.path.clone();
-                        let content = content.text();
-                        return iced::Task::perform(
-                            async move {
-                                std::fs::write(&path, content)
-                                    .map_err(|e| e.to_string())
-                            },
-                            Message::FileSaved,
-                        );
+                            let content = content.text();
+                            return iced::Task::perform(
+                                async move {
+                                    std::fs::write(&path, content)
+                                        .map_err(|e| e.to_string())
+                                },
+                                Message::FileSaved,
+                            );
                         }
                     }
                 }
                 iced::Task::none()
             }
-
             Message::FileSaved(result) => {
                 if let Err(e) = result {
                     eprintln!("Failed to save file: {}", e);
                 } else if let Some(idx) = self.active_tab {
-                    if let Some(tab) = self.tabs.get_mut(idx){
+                    if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor { ref mut modified, .. } = tab.kind {
                             *modified = false;
                         }
@@ -360,7 +387,6 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::SidebarResizeStart => {
                 self.resizing_sidebar = true;
                 self.resize_start_x = None;
@@ -384,18 +410,15 @@ impl App {
                 self.resize_start_x = None;
                 iced::Task::none()
             }
-
             Message::ToggleSidebar => {
                 self.sidebar_visible = !self.sidebar_visible;
                 iced::Task::none()
             }
-
             Message::ToggleFullscreen(_mode) => {
-                window::oldest().and_then(move |id|{
+                window::oldest().and_then(move |id| {
                     window::maximize(id, true)
                 })
             }
-
             Message::PreviewMarkdown => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
@@ -415,11 +438,9 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::MarkdownLinkClicked(_uri) => {
                 iced::Task::none()
             }
-
             Message::ToggleSearch => {
                 if self.search_visible {
                     self.search_visible = false;
@@ -431,15 +452,12 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::SearchQueryChanged(query) => {
                 self.search_query = query.clone();
-
                 if query.len() < 2 {
                     self.search_results.clear();
                     return iced::Task::none();
                 }
-
                 if let Some(ref tree) = self.file_tree {
                     let root = tree.root.clone();
                     iced::Task::perform(
@@ -452,17 +470,14 @@ impl App {
                     iced::Task::none()
                 }
             }
-
             Message::SearchCompleted(results) => {
                 self.search_results = results;
                 iced::Task::none()
             }
-
             Message::SearchResultClicked(path, _line_number) => {
                 self.search_visible = false;
                 self.search_query.clear();
                 self.search_results.clear();
-
                 if let Some(ref mut tree) = self.file_tree {
                     tree.select(path.clone());
                 }
@@ -479,7 +494,6 @@ impl App {
                     |(path, content)| Message::FileOpened(path, content),
                 )
             }
-
             Message::ToggleFileFinder => {
                 self.file_finder_visible = !self.file_finder_visible;
                 if !self.file_finder_visible {
@@ -490,23 +504,20 @@ impl App {
                 }
                 iced::widget::operation::focus(self.file_finder_input_id.clone())
             }
-
             Message::FileFinderQueryChanged(query) => {
                 self.file_finder_query = query.clone();
                 self.file_finder_selected = 0;
-
                 if query.is_empty() {
                     self.file_finder_results.clear();
                 } else {
                     self.file_finder_results = crate::search::fuzzy_find_files(
                         &query,
                         &self.all_workspace_files,
-                    20,
+                        20,
                     );
                 }
                 iced::widget::operation::focus(self.file_finder_input_id.clone())
             }
-
             Message::FileFinderNavigate(delta) => {
                 if !self.file_finder_visible {
                     return iced::Task::none();
@@ -524,12 +535,10 @@ impl App {
                 self.file_finder_selected = next;
                 iced::Task::none()
             }
-
             Message::FileFinderSelect => {
                 if !self.file_finder_visible {
                     return iced::Task::none();
                 }
-
                 let path = if self.file_finder_query.is_empty() {
                     self.recent_files.get(self.file_finder_selected).cloned()
                 } else {
@@ -537,19 +546,15 @@ impl App {
                         .get(self.file_finder_selected)
                         .map(|(_, _, p)| p.clone())
                 };
-
                 self.file_finder_visible = false;
                 self.file_finder_query.clear();
                 self.file_finder_results.clear();
                 self.file_finder_selected = 0;
-
                 if let Some(path) = path {
                     return self.update(Message::FileClicked(path));
                 }
                 iced::Task::none()
             }
-
-            // ── Fuzzy Finder (Cmd+Shift+F) ──────────────────────────────
             Message::ToggleFuzzyFinder => {
                 if self.fuzzy_finder.open {
                     self.fuzzy_finder.close();
@@ -560,7 +565,6 @@ impl App {
                     iced::widget::operation::focus(self.fuzzy_finder.input_id.clone())
                 }
             }
-
             Message::FuzzyFinderQueryChanged(query) => {
                 if !self.fuzzy_finder.open {
                     return iced::Task::none();
@@ -570,7 +574,6 @@ impl App {
                 self.fuzzy_finder.update_preview();
                 iced::widget::operation::focus(self.fuzzy_finder.input_id.clone())
             }
-
             Message::FuzzyFinderNavigate(delta) => {
                 if !self.fuzzy_finder.open {
                     return iced::Task::none();
@@ -578,7 +581,6 @@ impl App {
                 self.fuzzy_finder.navigate(delta);
                 iced::Task::none()
             }
-
             Message::FuzzyFinderSelect => {
                 if !self.fuzzy_finder.open {
                     return iced::Task::none();
@@ -588,7 +590,6 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::EscapePressed => {
                 if self.command_palette.open {
                     self.command_palette.close();
@@ -607,13 +608,13 @@ impl App {
                     self.search_visible = false;
                     self.search_query.clear();
                     self.search_results.clear();
+                } else if self.theme_dropdown_open {
+                    self.theme_dropdown_open = false;
                 } else if self.settings_open {
                     self.settings_open = false;
                 }
                 iced::Task::none()
             }
-
-            // Command Palette
             Message::ToggleCommandPalette => {
                 self.command_palette.toggle();
                 self.command_palette_selected = 0;
@@ -622,19 +623,16 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::CommandPaletteQueryChanged(query) => {
                 self.command_palette.input = query;
                 self.command_palette.filter_commands();
                 self.command_palette_selected = 0;
                 iced::widget::operation::focus(self.command_palette_input_id.clone())
             }
-
             Message::CommandPaletteSelect(command_name) => {
                 self.command_palette.close();
                 self.execute_palette_command(&command_name)
             }
-
             Message::CommandPaletteNavigate(delta) => {
                 if !self.command_palette.open {
                     return iced::Task::none();
@@ -648,8 +646,6 @@ impl App {
                 self.command_palette_selected = next;
                 iced::Task::none()
             }
-
-            // Terminal
             Message::ToggleTerminal => {
                 if let Some(ref tree) = self.file_tree {
                     self.terminal.set_directory(tree.root.clone());
@@ -657,8 +653,6 @@ impl App {
                 self.terminal.toggle();
                 iced::Task::none()
             }
-
-            // Find and Replace
             Message::ToggleFindReplace => {
                 self.find_replace.toggle();
                 if self.find_replace.open {
@@ -666,7 +660,6 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::FindQueryChanged(query) => {
                 self.find_replace.find_text = query;
                 if let Some(idx) = self.active_tab {
@@ -679,29 +672,24 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::ReplaceQueryChanged(query) => {
                 self.find_replace.replace_text = query;
                 iced::Task::none()
             }
-
             Message::FindNext => {
                 self.find_replace.go_to_next_match();
                 iced::Task::none()
             }
-
             Message::FindPrev => {
                 self.find_replace.go_to_prev_match();
                 iced::Task::none()
             }
-
             Message::ReplaceOne => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
                         if let TabKind::Editor { ref content, scroll_line, .. } = tab.kind {
                             let mut text = content.text();
                             self.find_replace.replace_next(&mut text);
-                            // Re-create content with modified text
                             let path = tab.path.clone();
                             let name = tab.name.clone();
                             self.tabs[idx] = Tab {
@@ -718,7 +706,6 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::ReplaceAll => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
@@ -741,7 +728,6 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::ToggleCaseSensitive => {
                 self.find_replace.case_sensitive = !self.find_replace.case_sensitive;
                 if let Some(idx) = self.active_tab {
@@ -754,55 +740,59 @@ impl App {
                 }
                 iced::Task::none()
             }
-
-            // Settings
             Message::ToggleSettings => {
                 self.settings_open = !self.settings_open;
+                self.theme_dropdown_open = false;
                 iced::Task::none()
             }
-
             Message::SettingsNavigate(section) => {
-                self.settings_section = section;
+                if section == "__toggle_theme_dropdown__" {
+                    self.theme_dropdown_open = !self.theme_dropdown_open;
+                } else {
+                    self.settings_section = section;
+                    self.theme_dropdown_open = false;
+                }
                 iced::Task::none()
             }
-
             Message::SettingsTabSizeChanged(val) => {
                 if let Ok(size) = val.parse::<usize>() {
                     self.editor_preferences.tab_size = size.max(1).min(16);
                 }
                 iced::Task::none()
             }
-
             Message::SettingsToggleUseSpaces => {
                 self.editor_preferences.use_spaces = !self.editor_preferences.use_spaces;
                 iced::Task::none()
             }
-
             Message::SettingsSavePreferences => {
                 let _ = prefs::save_preferences(&self.editor_preferences);
+                self.notification = Some(Notification {
+                    message: "Preferences saved".to_string(),
+                    shown_at: Instant::now(),
+                });
                 iced::Task::none()
             }
-
             Message::SettingsSelectTheme(name) => {
                 let new_theme = crate::theme::builtin_theme(&name);
                 crate::theme::set_theme(new_theme);
-                self.active_theme_name = name;
+                self.active_theme_name = name.clone();
+                self.editor_preferences.theme_name = name;
+                self.theme_dropdown_open = false;
+                // Auto-save preference when theme is changed
+                let _ = prefs::save_preferences(&self.editor_preferences);
                 iced::Task::none()
             }
-
             Message::SettingsReloadTheme => {
-                // Hot-reload theme.lua from ~/.config/rode/
                 use crate::config::theme_manager;
                 let lua_theme = theme_manager::load_theme();
-                // Convert the lua ThemeColors (hex strings) to an iced ThemeColors
-                // by writing it out and reloading — or parse hex directly
                 let t = crate::theme::ThemeColors::from_lua_theme(&lua_theme);
                 crate::theme::set_theme(t);
                 self.active_theme_name = "Custom (theme.lua)".to_string();
+                self.editor_preferences.theme_name = "Custom (theme.lua)".to_string();
+                self.theme_dropdown_open = false;
+                let _ = prefs::save_preferences(&self.editor_preferences);
                 iced::Task::none()
             }
-
-            // Vim command input
             Message::ToggleCommandInput => {
                 if self.command_input.open {
                     self.command_input.close();
@@ -812,12 +802,10 @@ impl App {
                 }
                 iced::Task::none()
             }
-
             Message::CommandInputChanged(input) => {
                 self.command_input.input = input;
                 iced::Task::none()
             }
-
             Message::CommandInputSubmit => {
                 if let Some(cmd) = self.command_input.process_command() {
                     self.command_input.close();
@@ -826,8 +814,6 @@ impl App {
                 self.command_input.close();
                 iced::Task::none()
             }
-
-            // New File
             Message::NewFile => {
                 let new_path = PathBuf::from("untitled");
                 self.tabs.push(Tab {
@@ -842,7 +828,6 @@ impl App {
                 self.active_tab = Some(self.tabs.len() - 1);
                 iced::Task::none()
             }
-
             Message::SaveAs => {
                 iced::Task::perform(
                     async {
@@ -852,28 +837,26 @@ impl App {
                             .await
                             .map(|handle| handle.path().to_path_buf())
                     },
-                    |result| {
-                        match result {
-                            Some(path) => Message::FileOpened(path, String::new()),
-                            None => Message::FileTreeRefresh,
-                        }
+                    |result| match result {
+                        Some(path) => Message::FileOpened(path, String::new()),
+                        None => Message::FileTreeRefresh,
                     }
                 )
             }
-
-            // WakaTime
             Message::WakaTimeApiKeyChanged(key) => {
                 self.wakatime.api_key = key;
                 iced::Task::none()
             }
-
             Message::WakaTimeApiUrlChanged(url) => {
                 self.wakatime.api_url = url;
                 iced::Task::none()
             }
-
             Message::SaveWakaTimeSettings => {
                 let _ = wakatime::save(&self.wakatime);
+                iced::Task::none()
+            }
+            Message::DismissNotification => {
+                self.notification = None;
                 iced::Task::none()
             }
         }
@@ -882,7 +865,6 @@ impl App {
     pub fn view(&self) -> Element<'_, Message> {
         use iced::widget::stack;
 
-        // When settings is open, replace the editor area with the settings panel
         let editor_area: Element<'_, Message> = if self.settings_open {
             self.view_settings_panel()
         } else {
@@ -890,7 +872,6 @@ impl App {
             let editor_widget = self.view_editor();
             let status_bar = self.view_status_bar();
 
-            // Build editor column with optional find/replace at the top and command input at the bottom
             let mut editor_col_items: Vec<Element<'_, Message>> = Vec::new();
             if self.find_replace.open {
                 editor_col_items.push(self.view_find_replace_panel());
@@ -946,7 +927,7 @@ impl App {
                 ..Default::default()
             });
 
-        if self.command_palette.open {
+        let base_view: Element<'_, Message> = if self.command_palette.open {
             stack![wrapped, self.view_command_palette_overlay()].into()
         } else if self.fuzzy_finder.open {
             stack![wrapped, self.view_fuzzy_finder_overlay()].into()
@@ -957,10 +938,15 @@ impl App {
                 .padding(iced::Padding { top: 20.0, right: 0.0, bottom: 0.0, left: 20.0 })
                 .width(Length::Fill)
                 .height(Length::Fill);
-
             stack![wrapped, search_panel].into()
         } else {
             wrapped.into()
+        };
+
+        if self.notification.is_some() {
+            stack![base_view, self.view_notification_toast()].into()
+        } else {
+            base_view
         }
     }
 
@@ -1013,7 +999,7 @@ impl App {
                         } else if modifiers.command() {
                             match c.as_str() {
                                 "b" => return Some(Message::ToggleSidebar),
-                            "r" => return Some(Message::ToggleSidebar),
+                                "r" => return Some(Message::ToggleSidebar),
                                 "o" => return Some(Message::OpenFolderDialog),
                                 "w" => return Some(Message::CloseActiveTab),
                                 "s" => return Some(Message::SaveFile),
@@ -1131,10 +1117,8 @@ impl App {
                 }
             }
 
-            let results_scroll = scrollable(
-                column(result_items).spacing(1)
-            )
-            .height(Length::Shrink);
+            let results_scroll = scrollable(column(result_items).spacing(1))
+                .height(Length::Shrink);
 
             content_col = content_col.push(
                 container(results_scroll).max_height(400.0)
@@ -1283,6 +1267,75 @@ impl App {
         iced::Task::none()
     }
 
+    fn view_notification_toast(&self) -> Element<'_, Message> {
+        use iced::widget::stack;
+
+        let check_circle = container(
+            text("✓").size(14).color(Color::from_rgb(0.40, 0.90, 0.55))
+        )
+        .width(Length::Fixed(26.0))
+        .height(Length::Fixed(26.0))
+        .center_x(Length::Fixed(26.0))
+        .center_y(Length::Fixed(26.0))
+        .style(|_theme| container::Style {
+            background: Some(Background::Color(Color::from_rgba(0.30, 0.85, 0.50, 0.15))),
+            border: iced::Border {
+                color: Color::from_rgba(0.35, 0.88, 0.52, 0.35),
+                width: 1.0,
+                radius: 13.0.into(),
+            },
+            ..Default::default()
+        });
+
+        let label = text("Preferences saved")
+            .size(13)
+            .color(Color::from_rgb(0.85, 0.97, 0.88));
+
+        let dismiss_btn = button(
+            text("×").size(14).color(Color::from_rgba(0.65, 0.90, 0.70, 0.7))
+        )
+        .on_press(Message::DismissNotification)
+        .style(|_theme, _status| button::Style {
+            background: None,
+            border: iced::Border::default(),
+            text_color: Color::from_rgba(0.65, 0.90, 0.70, 0.7),
+            ..Default::default()
+        })
+        .padding(iced::Padding { top: 0.0, right: 4.0, bottom: 0.0, left: 8.0 });
+
+        let toast_inner = row![check_circle, label, dismiss_btn]
+            .spacing(10)
+            .align_y(iced::Alignment::Center);
+
+        let toast = container(toast_inner)
+            .padding(iced::Padding { top: 10.0, right: 16.0, bottom: 10.0, left: 12.0 })
+            .style(|_theme| container::Style {
+                background: Some(Background::Color(Color::from_rgba(0.07, 0.20, 0.10, 0.96))),
+                border: iced::Border {
+                    color: Color::from_rgba(0.30, 0.78, 0.45, 0.40),
+                    width: 1.0,
+                    radius: 12.0.into(),
+                },
+                shadow: iced::Shadow {
+                    color: Color::from_rgba(0.0, 0.0, 0.0, 0.55),
+                    offset: iced::Vector::new(0.0, 8.0),
+                    blur_radius: 32.0,
+                },
+                ..Default::default()
+            });
+
+        container(
+            column![
+                container(toast).center_x(Length::Fill),
+                iced::widget::Space::new().height(Length::Fill),
+            ]
+        )
+        .padding(iced::Padding { top: 20.0, right: 0.0, bottom: 0.0, left: 0.0 })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+    }
+
     fn view_command_palette_overlay(&self) -> Element<'_, Message> {
         use iced::widget::{stack, center, Space, opaque};
 
@@ -1354,11 +1407,7 @@ impl App {
         )
         .on_press(Message::ToggleCommandPalette);
 
-        stack![
-            backdrop,
-            center(opaque(overlay_box)),
-        ]
-        .into()
+        stack![backdrop, center(opaque(overlay_box))].into()
     }
 
     fn view_find_replace_panel(&self) -> Element<'_, Message> {
@@ -1383,8 +1432,7 @@ impl App {
             .color(theme().text_dim);
 
         let case_btn = button(
-            text(if self.find_replace.case_sensitive { "Aa" } else { "aa" })
-                .size(11)
+            text(if self.find_replace.case_sensitive { "Aa" } else { "aa" }).size(11)
         )
         .on_press(Message::ToggleCaseSensitive)
         .style(tab_close_button_style)
@@ -1415,40 +1463,27 @@ impl App {
             .style(tab_close_button_style)
             .padding(iced::Padding { top: 3.0, right: 6.0, bottom: 3.0, left: 6.0 });
 
-        let find_row = row![
-            find_input,
-            match_info,
-            case_btn,
-            prev_btn,
-            next_btn,
-            close_btn,
-        ]
-        .spacing(6)
-        .align_y(iced::Alignment::Center);
+        let find_row = row![find_input, match_info, case_btn, prev_btn, next_btn, close_btn]
+            .spacing(6)
+            .align_y(iced::Alignment::Center);
 
-        let replace_row = row![
-            replace_input,
-            replace_btn,
-            replace_all_btn,
-        ]
-        .spacing(6)
-        .align_y(iced::Alignment::Center);
+        let replace_row = row![replace_input, replace_btn, replace_all_btn]
+            .spacing(6)
+            .align_y(iced::Alignment::Center);
 
-        container(
-            column![find_row, replace_row].spacing(6)
-        )
-        .padding(iced::Padding { top: 10.0, right: 14.0, bottom: 10.0, left: 14.0 })
-        .width(Length::Fill)
-        .style(|_theme| container::Style {
-            background: Some(Background::Color(theme().bg_secondary)),
-            border: iced::Border {
-                color: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-                width: 1.0,
-                radius: 0.0.into(),
-            },
-            ..Default::default()
-        })
-        .into()
+        container(column![find_row, replace_row].spacing(6))
+            .padding(iced::Padding { top: 10.0, right: 14.0, bottom: 10.0, left: 14.0 })
+            .width(Length::Fill)
+            .style(|_theme| container::Style {
+                background: Some(Background::Color(theme().bg_secondary)),
+                border: iced::Border {
+                    color: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
+                    width: 1.0,
+                    radius: 0.0.into(),
+                },
+                ..Default::default()
+            })
+            .into()
     }
 
     fn view_command_input_bar(&self) -> Element<'_, Message> {
@@ -1478,11 +1513,9 @@ impl App {
     fn view_settings_panel(&self) -> Element<'_, Message> {
         use iced::widget::Space;
 
-        // ── Sections for the left nav ────────────────────────────────
         let sections = vec![
             ("general", "General"),
             ("preferences", "Preferences"),
-            ("theme", "Theme"),
             ("wakatime", "WakaTime"),
         ];
 
@@ -1497,38 +1530,31 @@ impl App {
                     None
                 };
 
-                let btn = button(
-                    text(label).size(13).color(label_color)
-                )
-                .on_press(Message::SettingsNavigate(key.to_string()))
-                .style(move |_theme, _status| button::Style {
-                    background: bg,
-                    border: iced::Border::default(),
-                    text_color: label_color,
-                    ..Default::default()
-                })
-                .padding(iced::Padding { top: 8.0, right: 16.0, bottom: 8.0, left: 16.0 })
-                .width(Length::Fill);
-
-                btn.into()
+                button(text(label).size(13).color(label_color))
+                    .on_press(Message::SettingsNavigate(key.to_string()))
+                    .style(move |_theme, _status| button::Style {
+                        background: bg,
+                        border: iced::Border::default(),
+                        text_color: label_color,
+                        ..Default::default()
+                    })
+                    .padding(iced::Padding { top: 8.0, right: 16.0, bottom: 8.0, left: 16.0 })
+                    .width(Length::Fill)
+                    .into()
             })
             .collect();
 
-        let nav_header = text("Settings")
-            .size(14)
-            .color(theme().text_primary);
+        let nav_header = text("Settings").size(14).color(theme().text_primary);
 
-        let close_btn = button(
-            text("×").size(16).color(theme().text_muted)
-        )
-        .on_press(Message::ToggleSettings)
-        .style(|_theme, _status| button::Style {
-            background: None,
-            border: iced::Border::default(),
-            text_color: theme().text_muted,
-            ..Default::default()
-        })
-        .padding(iced::Padding { top: 2.0, right: 8.0, bottom: 2.0, left: 8.0 });
+        let close_btn = button(text("×").size(16).color(theme().text_muted))
+            .on_press(Message::ToggleSettings)
+            .style(|_theme, _status| button::Style {
+                background: None,
+                border: iced::Border::default(),
+                text_color: theme().text_muted,
+                ..Default::default()
+            })
+            .padding(iced::Padding { top: 2.0, right: 8.0, bottom: 2.0, left: 8.0 });
 
         let nav_top = row![nav_header, Space::new().width(Length::Fill), close_btn]
             .align_y(iced::Alignment::Center)
@@ -1540,51 +1566,44 @@ impl App {
                 ..Default::default()
             });
 
-        let mut nav_col_items: Vec<Element<'_, Message>> = vec![
-            nav_top.into(),
-            separator.into(),
-        ];
+        let mut nav_col_items: Vec<Element<'_, Message>> = vec![nav_top.into(), separator.into()];
         nav_col_items.extend(nav_items);
 
         let nav_sidebar = container(
-            scrollable(column(nav_col_items).spacing(2).padding(iced::Padding { top: 0.0, right: 0.0, bottom: 8.0, left: 0.0 }))
+            scrollable(
+                column(nav_col_items)
+                    .spacing(2)
+                    .padding(iced::Padding { top: 0.0, right: 0.0, bottom: 8.0, left: 0.0 })
+            )
         )
         .width(Length::Fixed(180.0))
         .height(Length::Fill)
         .style(|_theme| container::Style {
             background: Some(Background::Color(theme().bg_secondary)),
-            border: iced::Border {
-                color: Color::from_rgba(1.0, 1.0, 1.0, 0.04),
-                width: 0.0,
-                radius: 0.0.into(),
-            },
             ..Default::default()
         });
 
-        // ── Right content area ─────────────────────────────────────────
         let content_view: Element<'_, Message> = match self.settings_section.as_str() {
             "general" => self.view_settings_general(),
             "preferences" => self.view_settings_preferences(),
-            "theme" => self.view_settings_theme(),
             "wakatime" => self.view_settings_wakatime(),
             _ => self.view_settings_general(),
         };
 
-        let content_scrollable = scrollable(
-            container(content_view)
-                .padding(iced::Padding { top: 24.0, right: 32.0, bottom: 24.0, left: 32.0 })
-                .width(Length::Fill)
-        );
+        let content_area = container(
+            scrollable(
+                container(content_view)
+                    .padding(iced::Padding { top: 24.0, right: 32.0, bottom: 24.0, left: 32.0 })
+                    .width(Length::Fill)
+            )
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(|_theme| container::Style {
+            background: Some(Background::Color(theme().bg_editor)),
+            ..Default::default()
+        });
 
-        let content_area = container(content_scrollable)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(Background::Color(theme().bg_editor)),
-                ..Default::default()
-            });
-
-        // ── Vertical separator between nav and content ──────────────
         let vert_sep = container(Space::new().width(Length::Fixed(1.0)).height(Length::Fill))
             .style(|_theme| container::Style {
                 background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.06))),
@@ -1600,13 +1619,8 @@ impl App {
     fn view_settings_general(&self) -> Element<'_, Message> {
         use iced::widget::Space;
 
-        let heading = text("General")
-            .size(18)
-            .color(theme().text_primary);
-
-        let desc = text("General application settings and information.")
-            .size(12)
-            .color(theme().text_dim);
+        let heading = text("General").size(18).color(theme().text_primary);
+        let desc = text("General application settings and information.").size(12).color(theme().text_dim);
 
         let separator = container(Space::new().width(Length::Fill).height(Length::Fixed(1.0)))
             .style(|_theme| container::Style {
@@ -1617,45 +1631,30 @@ impl App {
         let version_row = row![
             text("Version").size(13).color(theme().text_muted).width(Length::Fixed(140.0)),
             text("1.0.0").size(13).color(theme().text_primary),
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center);
+        ].spacing(12).align_y(iced::Alignment::Center);
 
         let app_name_row = row![
             text("Application").size(13).color(theme().text_muted).width(Length::Fixed(140.0)),
             text("Rode Editor").size(13).color(theme().text_primary),
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center);
+        ].spacing(12).align_y(iced::Alignment::Center);
 
         let framework_row = row![
             text("Framework").size(13).color(theme().text_muted).width(Length::Fixed(140.0)),
             text("iced 0.14").size(13).color(theme().text_primary),
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center);
+        ].spacing(12).align_y(iced::Alignment::Center);
 
-        column![
-            heading,
-            desc,
-            separator,
-            app_name_row,
-            version_row,
-            framework_row,
-        ]
-        .spacing(12)
-        .width(Length::Fill)
-        .into()
+        column![heading, desc, separator, app_name_row, version_row, framework_row]
+            .spacing(12)
+            .width(Length::Fill)
+            .into()
     }
 
     fn view_settings_preferences(&self) -> Element<'_, Message> {
         use iced::widget::Space;
+        use crate::theme::BUILTIN_THEMES;
 
-        let heading = text("Preferences")
-            .size(18)
-            .color(theme().text_primary);
-
-        let desc = text("Configure editor behavior and formatting.")
+        let heading = text("Preferences").size(18).color(theme().text_primary);
+        let desc = text("Configure editor behavior, formatting, and appearance.")
             .size(12)
             .color(theme().text_dim);
 
@@ -1688,41 +1687,118 @@ impl App {
                 text("Indent Using").size(13).color(theme().text_muted),
                 text("Choose between spaces or tabs for indentation").size(11).color(theme().text_dim),
             ].spacing(2).width(Length::FillPortion(2)),
-            button(
-                text(spaces_label).size(12).color(theme().text_primary)
-            )
-            .on_press(Message::SettingsToggleUseSpaces)
+            button(text(spaces_label).size(12).color(theme().text_primary))
+                .on_press(Message::SettingsToggleUseSpaces)
+                .style(|_theme, _status| button::Style {
+                    background: Some(Background::Color(theme().bg_secondary)),
+                    border: iced::Border {
+                        color: Color::from_rgba(1.0, 1.0, 1.0, 0.08),
+                        width: 1.0,
+                        radius: 4.0.into(),
+                    },
+                    text_color: theme().text_primary,
+                    ..Default::default()
+                })
+                .padding(iced::Padding { top: 6.0, right: 16.0, bottom: 6.0, left: 16.0 }),
+        ]
+        .spacing(16)
+        .align_y(iced::Alignment::Center);
+
+        // Theme dropdown
+        let all_themes: Vec<&str> = {
+            let mut v: Vec<&str> = BUILTIN_THEMES.to_vec();
+            v.push("Custom (theme.lua)");
+            v
+        };
+
+        let dropdown_trigger = button(
+            row![
+                text(&self.active_theme_name).size(12).color(theme().text_primary),
+                Space::new().width(Length::Fill),
+                text(if self.theme_dropdown_open { "▲" } else { "▼" })
+                    .size(10)
+                    .color(theme().text_dim),
+            ]
+            .align_y(iced::Alignment::Center)
+        )
+        .on_press(Message::SettingsNavigate("__toggle_theme_dropdown__".to_string()))
+        .style(|_theme, _status| button::Style {
+            background: Some(Background::Color(theme().bg_secondary)),
+            border: iced::Border {
+                color: Color::from_rgba(1.0, 1.0, 1.0, 0.10),
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            text_color: theme().text_primary,
+            ..Default::default()
+        })
+        .padding(iced::Padding { top: 8.0, right: 12.0, bottom: 8.0, left: 14.0 })
+        .width(Length::Fixed(220.0));
+
+        let mut dropdown_items: Vec<Element<'_, Message>> = vec![dropdown_trigger.into()];
+        if self.theme_dropdown_open {
+            for name in &all_themes {
+                let is_active = self.active_theme_name == *name;
+                let item_color = if is_active { ACCENT_PURPLE } else { theme().text_muted };
+                let item_bg = if is_active {
+                    Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.15)))
+                } else {
+                    Some(Background::Color(theme().bg_secondary))
+                };
+                let name_str = name.to_string();
+                let item = button(
+                    row![
+                        text(if is_active { "●" } else { "○" }).size(9).color(item_color),
+                        text(*name).size(12).color(item_color),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center)
+                )
+                .on_press(if *name == "Custom (theme.lua)" {
+                    Message::SettingsReloadTheme
+                } else {
+                    Message::SettingsSelectTheme(name_str)
+                })
+                .style(move |_theme, _status| button::Style {
+                    background: item_bg,
+                    border: iced::Border {
+                        color: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
+                        width: 1.0,
+                        radius: 0.0.into(),
+                    },
+                    text_color: item_color,
+                    ..Default::default()
+                })
+                .padding(iced::Padding { top: 7.0, right: 14.0, bottom: 7.0, left: 14.0 })
+                .width(Length::Fixed(220.0));
+                dropdown_items.push(item.into());
+            }
+        }
+
+        let theme_row = row![
+            column![
+                text("Color Theme").size(13).color(theme().text_muted),
+                text("Select a color theme for the editor").size(11).color(theme().text_dim),
+            ].spacing(2).width(Length::FillPortion(2)),
+            column(dropdown_items).spacing(0).width(Length::Fixed(220.0)),
+        ]
+        .spacing(16)
+        .align_y(iced::Alignment::Start);
+
+        // Save button
+        let save_btn = button(text("Save Preferences").size(12).color(theme().text_primary))
+            .on_press(Message::SettingsSavePreferences)
             .style(|_theme, _status| button::Style {
-                background: Some(Background::Color(theme().bg_secondary)),
+                background: Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.2))),
                 border: iced::Border {
-                    color: Color::from_rgba(1.0, 1.0, 1.0, 0.08),
+                    color: ACCENT_PURPLE.scale_alpha(0.4),
                     width: 1.0,
                     radius: 4.0.into(),
                 },
                 text_color: theme().text_primary,
                 ..Default::default()
             })
-            .padding(iced::Padding { top: 6.0, right: 16.0, bottom: 6.0, left: 16.0 }),
-        ]
-        .spacing(16)
-        .align_y(iced::Alignment::Center);
-
-        // Save button
-        let save_btn = button(
-            text("Save Preferences").size(12).color(theme().text_primary)
-        )
-        .on_press(Message::SettingsSavePreferences)
-        .style(|_theme, _status| button::Style {
-            background: Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.2))),
-            border: iced::Border {
-                color: ACCENT_PURPLE.scale_alpha(0.4),
-                width: 1.0,
-                radius: 4.0.into(),
-            },
-            text_color: theme().text_primary,
-            ..Default::default()
-        })
-        .padding(iced::Padding { top: 8.0, right: 20.0, bottom: 8.0, left: 20.0 });
+            .padding(iced::Padding { top: 8.0, right: 20.0, bottom: 8.0, left: 20.0 });
 
         column![
             heading,
@@ -1740,6 +1816,12 @@ impl App {
                     background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.03))),
                     ..Default::default()
                 }),
+            theme_row,
+            container(Space::new().width(Length::Fill).height(Length::Fixed(1.0)))
+                .style(|_theme| container::Style {
+                    background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.03))),
+                    ..Default::default()
+                }),
             Space::new().height(Length::Fixed(8.0)),
             save_btn,
         ]
@@ -1750,13 +1832,9 @@ impl App {
 
     fn view_settings_theme(&self) -> Element<'_, Message> {
         use iced::widget::Space;
-        use crate::theme::BUILTIN_THEMES;
 
-        let heading = text("Theme")
-            .size(18)
-            .color(theme().text_primary);
-
-        let desc = text("Select a color theme for the editor.")
+        let heading = text("Theme").size(18).color(theme().text_primary);
+        let desc = text("Theme options have been moved to Preferences.")
             .size(12)
             .color(theme().text_dim);
 
@@ -1766,127 +1844,48 @@ impl App {
                 ..Default::default()
             });
 
-        // Built-in theme buttons
-        let mut theme_items: Vec<Element<'_, Message>> = Vec::new();
-        for name in BUILTIN_THEMES {
-            let is_active = self.active_theme_name == *name;
-            let label_color = if is_active { theme().text_primary } else { theme().text_muted };
-            let bg_color = if is_active {
-                Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.15)))
-            } else {
-                Some(Background::Color(theme().bg_secondary))
-            };
-            let border_color = if is_active {
-                ACCENT_PURPLE.scale_alpha(0.4)
-            } else {
-                Color::from_rgba(1.0, 1.0, 1.0, 0.06)
-            };
-
-            let btn = button(
-                text(*name).size(13).color(label_color)
-            )
-            .on_press(Message::SettingsSelectTheme(name.to_string()))
-            .style(move |_theme, _status| button::Style {
-                background: bg_color,
+        let hint_btn = button(text("Go to Preferences →").size(13).color(ACCENT_PURPLE))
+            .on_press(Message::SettingsNavigate("preferences".to_string()))
+            .style(|_theme, _status| button::Style {
+                background: Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.10))),
                 border: iced::Border {
-                    color: border_color,
+                    color: ACCENT_PURPLE.scale_alpha(0.25),
                     width: 1.0,
                     radius: 6.0.into(),
                 },
-                text_color: label_color,
+                text_color: ACCENT_PURPLE,
                 ..Default::default()
             })
-            .padding(iced::Padding { top: 10.0, right: 16.0, bottom: 10.0, left: 16.0 })
-            .width(Length::Fill);
+            .padding(iced::Padding { top: 10.0, right: 18.0, bottom: 10.0, left: 18.0 });
 
-            theme_items.push(btn.into());
-        }
-
-        // Custom theme (theme.lua) option
-        let is_custom = self.active_theme_name == "Custom (theme.lua)";
-        let custom_color = if is_custom { theme().text_primary } else { theme().text_muted };
-        let custom_bg = if is_custom {
-            Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.15)))
-        } else {
-            Some(Background::Color(theme().bg_secondary))
-        };
-        let custom_border = if is_custom {
-            ACCENT_PURPLE.scale_alpha(0.4)
-        } else {
-            Color::from_rgba(1.0, 1.0, 1.0, 0.06)
-        };
-
-        let custom_label = button(
-            text("Custom (theme.lua)").size(13).color(custom_color)
-        )
-        .on_press(Message::SettingsReloadTheme)
-        .style(move |_theme, _status| button::Style {
-            background: custom_bg,
-            border: iced::Border {
-                color: custom_border,
-                width: 1.0,
-                radius: 6.0.into(),
-            },
-            text_color: custom_color,
-            ..Default::default()
-        })
-        .padding(iced::Padding { top: 10.0, right: 16.0, bottom: 10.0, left: 16.0 })
-        .width(Length::Fill);
-        theme_items.push(custom_label.into());
-
-        let theme_list = column(theme_items).spacing(6);
-
-        // Reload button (icon-only ↻)
-        let reload_sep = container(Space::new().width(Length::Fill).height(Length::Fixed(1.0)))
-            .style(|_theme| container::Style {
-                background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.03))),
-                ..Default::default()
-            });
-
-        let reload_desc = text("Reload theme.lua from ~/.config/rode/")
+        let reload_desc = text("Or reload a custom theme.lua from ~/.config/rode/")
             .size(11)
             .color(theme().text_dim);
 
-        let reload_btn = button(
-            text("↻").size(18).color(theme().text_primary)
-        )
-        .on_press(Message::SettingsReloadTheme)
-        .style(|_theme, _status| button::Style {
-            background: Some(Background::Color(theme().bg_secondary)),
-            border: iced::Border {
-                color: Color::from_rgba(1.0, 1.0, 1.0, 0.08),
-                width: 1.0,
-                radius: 6.0.into(),
-            },
-            text_color: theme().text_primary,
-            ..Default::default()
-        })
-        .padding(iced::Padding { top: 6.0, right: 12.0, bottom: 6.0, left: 12.0 });
+        let reload_btn = button(text("↻  Reload theme.lua").size(12).color(theme().text_primary))
+            .on_press(Message::SettingsReloadTheme)
+            .style(|_theme, _status| button::Style {
+                background: Some(Background::Color(theme().bg_secondary)),
+                border: iced::Border {
+                    color: Color::from_rgba(1.0, 1.0, 1.0, 0.08),
+                    width: 1.0,
+                    radius: 6.0.into(),
+                },
+                text_color: theme().text_primary,
+                ..Default::default()
+            })
+            .padding(iced::Padding { top: 8.0, right: 16.0, bottom: 8.0, left: 16.0 });
 
-        let reload_row = row![reload_desc, Space::new().width(Length::Fill), reload_btn]
+        column![heading, desc, separator, hint_btn, Space::new().height(Length::Fixed(8.0)), reload_desc, reload_btn]
             .spacing(12)
-            .align_y(iced::Alignment::Center);
-
-        column![
-            heading,
-            desc,
-            separator,
-            theme_list,
-            reload_sep,
-            reload_row,
-        ]
-        .spacing(12)
-        .width(Length::Fill)
-        .into()
+            .width(Length::Fill)
+            .into()
     }
 
     fn view_settings_wakatime(&self) -> Element<'_, Message> {
         use iced::widget::Space;
 
-        let heading = text("WakaTime")
-            .size(18)
-            .color(theme().text_primary);
-
+        let heading = text("WakaTime").size(18).color(theme().text_primary);
         let desc = text("Configure WakaTime integration for activity tracking.")
             .size(12)
             .color(theme().text_dim);
@@ -1897,7 +1896,6 @@ impl App {
                 ..Default::default()
             });
 
-        // API Key
         let api_key_row = row![
             column![
                 text("API Key").size(13).color(theme().text_muted),
@@ -1913,7 +1911,6 @@ impl App {
         .spacing(16)
         .align_y(iced::Alignment::Center);
 
-        // API URL
         let api_url_row = row![
             column![
                 text("API URL").size(13).color(theme().text_muted),
@@ -1929,22 +1926,19 @@ impl App {
         .spacing(16)
         .align_y(iced::Alignment::Center);
 
-        // Save button
-        let save_btn = button(
-            text("Save WakaTime Settings").size(12).color(theme().text_primary)
-        )
-        .on_press(Message::SaveWakaTimeSettings)
-        .style(|_theme, _status| button::Style {
-            background: Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.2))),
-            border: iced::Border {
-                color: ACCENT_PURPLE.scale_alpha(0.4),
-                width: 1.0,
-                radius: 4.0.into(),
-            },
-            text_color: theme().text_primary,
-            ..Default::default()
-        })
-        .padding(iced::Padding { top: 8.0, right: 20.0, bottom: 8.0, left: 20.0 });
+        let save_btn = button(text("Save WakaTime Settings").size(12).color(theme().text_primary))
+            .on_press(Message::SaveWakaTimeSettings)
+            .style(|_theme, _status| button::Style {
+                background: Some(Background::Color(ACCENT_PURPLE.scale_alpha(0.2))),
+                border: iced::Border {
+                    color: ACCENT_PURPLE.scale_alpha(0.4),
+                    width: 1.0,
+                    radius: 4.0.into(),
+                },
+                text_color: theme().text_primary,
+                ..Default::default()
+            })
+            .padding(iced::Padding { top: 8.0, right: 20.0, bottom: 8.0, left: 20.0 });
 
         column![
             heading,
@@ -1972,10 +1966,9 @@ impl App {
 
     fn view_fuzzy_finder_overlay(&self) -> Element<'_, Message> {
         use iced::widget::{stack, center, Space, opaque};
-        use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter as SyntectHighlighter, ThemeSettings};
+        use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter as SyntectHighlighter};
         use syntect::parsing::{ParseState, ScopeStack, SyntaxSet};
 
-        // ── Search input ────────────────────────────────────────────────
         let input = text_input("Search files...", &self.fuzzy_finder.input)
             .id(self.fuzzy_finder.input_id.clone())
             .on_input(Message::FuzzyFinderQueryChanged)
@@ -1984,12 +1977,9 @@ impl App {
             .style(search_input_style)
             .width(Length::Fill);
 
-        // ── Folder label ────────────────────────────────────────────────
         let folder_label: Element<'_, Message> = if let Some(folder) = &self.fuzzy_finder.current_folder {
             container(
-                text(format!("{}", folder.display()))
-                    .size(10)
-                    .color(theme().text_dim)
+                text(format!("{}", folder.display())).size(10).color(theme().text_dim)
             )
             .padding(iced::Padding { top: 0.0, right: 18.0, bottom: 0.0, left: 18.0 })
             .into()
@@ -1997,32 +1987,23 @@ impl App {
             container(text("")).into()
         };
 
-        // ── File list ───────────────────────────────────────────────────
         let mut items: Vec<Element<'_, Message>> = Vec::new();
 
         if self.fuzzy_finder.filtered_files.is_empty() {
             items.push(
-                container(
-                    text("No files found")
-                        .size(13)
-                        .color(theme().text_dim)
-                )
-                .padding(20)
-                .width(Length::Fill)
-                .center_x(Length::Fill)
-                .into()
+                container(text("No files found").size(13).color(theme().text_dim))
+                    .padding(20)
+                    .width(Length::Fill)
+                    .center_x(Length::Fill)
+                    .into()
             );
         } else {
             for (idx, file) in self.fuzzy_finder.filtered_files.iter().enumerate() {
                 let is_selected = idx == self.fuzzy_finder.selected_index;
                 let path = file.path.clone();
 
-                // Get file icon
                 let icon_str = crate::icons::get_file_icon(
-                    file.path.file_name()
-                        .unwrap_or_default()
-                        .to_str()
-                        .unwrap_or("")
+                    file.path.file_name().unwrap_or_default().to_str().unwrap_or("")
                 );
                 let icon: Element<'_, Message> = if icon_str.ends_with(".png") {
                     iced::widget::image::Image::new(icon_str)
@@ -2079,11 +2060,8 @@ impl App {
                 ..Default::default()
             });
 
-        // ── Preview panel ───────────────────────────────────────────────
         let preview: Element<'_, Message> = if let Some((preview_path, content)) = &self.fuzzy_finder.preview_cache {
-            let ext = preview_path.extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
+            let ext = preview_path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
             let syntax_set = SyntaxSet::load_defaults_newlines();
             let syntax = syntax_set
@@ -2098,22 +2076,13 @@ impl App {
 
             for (line_idx, line) in content.lines().enumerate().take(100) {
                 let line_with_newline = format!("{}\n", line);
-                let ops = parse_state
-                    .parse_line(&line_with_newline, &syntax_set)
-                    .unwrap_or_default();
+                let ops = parse_state.parse_line(&line_with_newline, &syntax_set).unwrap_or_default();
                 let ranges: Vec<_> = HighlightIterator::new(
-                    &mut highlight_state,
-                    &ops,
-                    &line_with_newline,
-                    &highlighter,
-                )
-                .collect();
+                    &mut highlight_state, &ops, &line_with_newline, &highlighter,
+                ).collect();
 
-                // Build a row: line number + highlighted spans
                 let line_num: Element<'_, Message> = container(
-                    text(format!("{}", line_idx + 1))
-                        .size(11)
-                        .color(OVERLAY_2)
+                    text(format!("{}", line_idx + 1)).size(11).color(OVERLAY_2)
                 )
                 .width(Length::Fixed(36.0))
                 .align_right(Length::Fixed(36.0))
@@ -2121,11 +2090,7 @@ impl App {
 
                 let mut spans: Vec<iced::widget::text::Span<'_, iced::Font>> = Vec::new();
                 for (style, fragment) in &ranges {
-                    let txt = if fragment.ends_with('\n') {
-                        &fragment[..fragment.len() - 1]
-                    } else {
-                        fragment
-                    };
+                    let txt = if fragment.ends_with('\n') { &fragment[..fragment.len() - 1] } else { fragment };
                     if txt.is_empty() { continue; }
                     spans.push(
                         iced::widget::text::Span::new(txt.to_string())
@@ -2139,24 +2104,17 @@ impl App {
                     );
                 }
 
-                let code_text: Element<'_, Message> = iced::widget::rich_text(spans).into();
-
                 line_elements.push(
-                    row![line_num, code_text]
+                    row![line_num, iced::widget::rich_text(spans)]
                         .spacing(8)
                         .into()
                 );
             }
 
             let preview_header = container(
-                text(
-                    preview_path.file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string()
-                )
-                .size(11)
-                .color(theme().text_dim)
+                text(preview_path.file_name().unwrap_or_default().to_string_lossy().to_string())
+                    .size(11)
+                    .color(theme().text_dim)
             )
             .padding(iced::Padding { top: 8.0, right: 12.0, bottom: 6.0, left: 12.0 });
 
@@ -2180,27 +2138,17 @@ impl App {
                 .height(Length::Fill)
                 .into()
         } else {
-            container(
-                text("No preview available")
-                    .size(13)
-                    .color(theme().text_dim)
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            container(text("No preview available").size(13).color(theme().text_dim))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .into()
         };
 
-        // ── Layout: left column (input + file list) | right column (preview)
-        let left_panel = column![
-            input,
-            folder_label,
-            separator_h,
-            file_list,
-        ]
-        .width(Length::FillPortion(2))
-        .height(Length::Fill);
+        let left_panel = column![input, folder_label, separator_h, file_list]
+            .width(Length::FillPortion(2))
+            .height(Length::Fill);
 
         let right_panel = container(preview)
             .width(Length::FillPortion(3))
@@ -2210,10 +2158,7 @@ impl App {
                 ..Default::default()
             });
 
-        let split = row![left_panel, separator_v, right_panel]
-            .height(Length::Fill);
-
-        let overlay_box = container(split)
+        let overlay_box = container(row![left_panel, separator_v, right_panel].height(Length::Fill))
             .width(Length::Fixed(900.0))
             .height(Length::Fixed(520.0))
             .style(file_finder_panel_style);
@@ -2229,11 +2174,7 @@ impl App {
         )
         .on_press(Message::ToggleFuzzyFinder);
 
-        stack![
-            backdrop,
-            center(opaque(overlay_box)),
-        ]
-        .into()
+        stack![backdrop, center(opaque(overlay_box))].into()
     }
 
     fn view_file_finder_overlay(&self) -> Element<'_, Message> {
@@ -2252,28 +2193,18 @@ impl App {
         if self.file_finder_query.is_empty() {
             if !self.recent_files.is_empty() {
                 items.push(
-                    container(
-                        text("Recent Files")
-                            .size(10)
-                            .color(theme().text_dim)
-                    )
-                    .padding(iced::Padding { top: 8.0, right: 8.0, bottom: 4.0, left: 14.0 })
-                    .into()
+                    container(text("Recent Files").size(10).color(theme().text_dim))
+                        .padding(iced::Padding { top: 8.0, right: 8.0, bottom: 4.0, left: 14.0 })
+                        .into()
                 );
             }
             for (idx, path) in self.recent_files.iter().enumerate() {
                 let is_selected = idx == self.file_finder_selected;
-                let display = path.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
+                let display = path.file_name().unwrap_or_default().to_string_lossy().to_string();
                 let parent = path.parent()
                     .and_then(|p| {
                         self.file_tree.as_ref().map(|t| {
-                            p.strip_prefix(&t.root)
-                                .unwrap_or(p)
-                                .to_string_lossy()
-                                .to_string()
+                            p.strip_prefix(&t.root).unwrap_or(p).to_string_lossy().to_string()
                         })
                     })
                     .unwrap_or_default();
@@ -2299,7 +2230,6 @@ impl App {
             for (idx, (_score, display, abs_path)) in self.file_finder_results.iter().enumerate() {
                 let is_selected = idx == self.file_finder_selected;
                 let path = abs_path.clone();
-
                 items.push(
                     button(
                         text(display).size(13).color(
@@ -2316,7 +2246,6 @@ impl App {
         }
 
         let has_results = !items.is_empty();
-
         let separator = container(Space::new())
             .width(Length::Fill)
             .height(Length::Fixed(1.0))
@@ -2351,10 +2280,6 @@ impl App {
         )
         .on_press(Message::ToggleFileFinder);
 
-        stack![
-            backdrop,
-            center(opaque(overlay_box)),
-        ]
-        .into()
+        stack![backdrop, center(opaque(overlay_box))].into()
     }
 }
