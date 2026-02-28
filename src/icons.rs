@@ -2,12 +2,12 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Base directory for file icons (`assets/icons/`)
+/// Base directory for file icons (`src/assets/icons/`)
 fn icons_base() -> PathBuf {
-    crate::resources::resource_dir().join("assets").join("icons")
+    crate::resources::resource_dir().join("src").join("assets").join("icons")
 }
 
-/// Base directory for folder icons (`assets/icons/folders/`)
+/// Base directory for folder icons (`src/assets/icons/folders/`)
 fn folder_icons_base() -> PathBuf {
     icons_base().join("folders")
 }

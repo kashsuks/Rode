@@ -9,7 +9,7 @@ repository = "https://github.com/kashsuks/rode"
 readme = "README.md"
 keywords = ["editor", "terminal", "egui"]
 categories = ["development-tools"]
-include = ["src/**/*", "assets/**/*", "Cargo.toml", "README.md", "LICENSE"]
+include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
 [dependencies]
 eframe = "0.29"

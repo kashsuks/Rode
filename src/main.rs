@@ -18,10 +18,10 @@ mod theme;
 mod ui;
 mod wakatime;
 
-const FIRA_CODE: &[u8] = include_bytes!("../assets/fonts/FiraCode-Regular.ttf");
+const FIRA_CODE: &[u8] = include_bytes!("assets/fonts/FiraCode-Regular.ttf");
 
 fn main() -> iced::Result {
-    let icon_data = include_bytes!("../assets/icon.png");
+    let icon_data = include_bytes!("assets/icon.png");
     let icon = window::icon::from_file_data(
         icon_data, None)
         .expect("Failed to load icon.");

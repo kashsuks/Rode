@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-/// Returns the base directory where bundled resources (extensions/, fonts/, assets/) live.
+/// Returns the base directory where bundled resources live (assets are now under src/assets/).
 ///
 /// - In a macOS .app bundle the executable is at `<app>.app/Contents/MacOS/<bin>`
 ///   and resources are copied to `<app>.app/Contents/Resources/`.

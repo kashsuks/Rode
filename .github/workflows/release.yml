@@ -148,11 +148,11 @@ jobs:
 
           # Stamp the version from Cargo.toml into Info.plist
           sed "s/__BUNDLE_VERSION__/${VERSION}/g" \
-            assets/macos/Info.plist > "${bundle}/Contents/Info.plist"
+            src/assets/macos/Info.plist > "${bundle}/Contents/Info.plist"
 
-          # Copy icon if it exists (add your .icns file to assets/macos/ later)
-          if [ -f "assets/macos/AppIcon.icns" ]; then
-            cp assets/macos/AppIcon.icns "${bundle}/Contents/Resources/AppIcon.icns"
+          # Copy icon if it exists (add your .icns file to src/assets/macos/ later)
+          if [ -f "src/assets/macos/AppIcon.icns" ]; then
+            cp src/assets/macos/AppIcon.icns "${bundle}/Contents/Resources/AppIcon.icns"
             # Add icon key to Info.plist
             /usr/libexec/PlistBuddy -c \
               "Add :CFBundleIconFile string AppIcon" \
@@ -190,7 +190,7 @@ jobs:
 
           # ── DMG window appearance ──────────────────────────────────────
           # Set icon positions and window bounds via AppleScript.
-          # Add your background image to assets/macos/dmg-background.png
+          # Add your background image to src/assets/macos/dmg-background.png
           # and uncomment the set background picture line when ready.
           osascript << APPLESCRIPT
           tell application "Finder"
