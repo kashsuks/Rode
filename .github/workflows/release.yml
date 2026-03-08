@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,9 +20,10 @@ jobs:
 
       - name: Check version and release status
         id: check
+        shell: bash
         run: |
           VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           LATEST=$(curl -s \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -31,48 +32,52 @@ jobs:
             | sed -E 's/.*"v([^"]+)".*/\1/' || echo "none")
 
           if [ "$LATEST" != "$VERSION" ]; then
-            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
           else
-            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # ── 2. Linux build ─────────────────────────────────────────────────────────
-  build-linux:
+  # ── 2. Arch Linux build ────────────────────────────────────────────────────
+  build-archlinux:
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
     env:
       VERSION: ${{ needs.check-version.outputs.version }}
     steps:
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            base-devel \
+            rust \
+            cargo \
+            git \
+            pkgconf \
+            gtk3 \
+            xdotool \
+            openssl
+
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
-
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libxdo-dev \
-            libssl-dev \
-            pkg-config
-
       - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-gnu
+        shell: bash
+        run: cargo build --release --locked
 
       - name: Package
+        shell: bash
         run: |
-          cp target/x86_64-unknown-linux-gnu/release/rode-editor \
-             rode-editor-${VERSION}-linux-x86_64
+          cp target/release/rode-editor \
+             rode-editor-${VERSION}-archlinux-x86_64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binary-linux
-          path: rode-editor-${{ env.VERSION }}-linux-x86_64
+          name: binary-archlinux
+          path: rode-editor-${{ env.VERSION }}-archlinux-x86_64
           retention-days: 1
 
   # ── 3. Windows build ───────────────────────────────────────────────────────
@@ -91,7 +96,7 @@ jobs:
           targets: x86_64-pc-windows-msvc
 
       - name: Build
-        run: cargo build --release --target x86_64-pc-windows-msvc
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
 
       - name: Package
         shell: bash
@@ -106,7 +111,7 @@ jobs:
           path: rode-editor-${{ env.VERSION }}-windows-x86_64.exe
           retention-days: 1
 
-  # ── 4. macOS universal binary + DMG + tar.gz ───────────────────────────────
+  # ── 4. macOS universal .app + .dmg ────────────────────────────────────────
   build-macos:
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
@@ -123,63 +128,46 @@ jobs:
 
       - name: Locate macOS SDK
         id: sdk
+        shell: bash
         run: |
           SDK=$(xcrun --sdk macosx --show-sdk-path)
-          echo "path=$SDK" >> $GITHUB_OUTPUT
+          echo "path=$SDK" >> "$GITHUB_OUTPUT"
 
-      # Build Apple Silicon natively (runner is M1)
       - name: Build aarch64
-        run: cargo build --release --target aarch64-apple-darwin
+        run: cargo build --release --locked --target aarch64-apple-darwin
 
-      # Cross-compile Intel from the ARM runner.
-      # CFLAGS/CXXFLAGS tell clang to target x86_64 so C deps
-      # (resvg, tiny-skia, syntect/onig) compile correctly.
       - name: Build x86_64
         env:
           SDKROOT: ${{ steps.sdk.outputs.path }}
           CFLAGS: "-target x86_64-apple-macos12.0"
           CXXFLAGS: "-target x86_64-apple-macos12.0"
-        run: cargo build --release --target x86_64-apple-darwin
+        run: cargo build --release --locked --target x86_64-apple-darwin
 
       - name: Create universal binary with lipo
+        shell: bash
         run: |
           mkdir -p universal
           lipo -create \
             target/aarch64-apple-darwin/release/rode-editor \
             target/x86_64-apple-darwin/release/rode-editor \
             -output universal/rode-editor
-          # Confirm both architectures are present
           lipo -info universal/rode-editor
 
-      # ── Assemble .app bundle ───────────────────────────────────────────────
-      # Layout:
-      #   Rode.app/
-      #     Contents/
-      #       Info.plist
-      #       MacOS/
-      #         rode-editor          ← universal binary
-      #       Resources/
-      #         src/                 ← assets subtree (icons.rs resolves via resources.rs)
-      #         AppIcon.icns         ← if present
       - name: Assemble .app bundle
+        shell: bash
         run: |
           APP="Rode.app"
           mkdir -p "${APP}/Contents/MacOS"
           mkdir -p "${APP}/Contents/Resources/src/assets"
 
-          # Binary
           cp universal/rode-editor "${APP}/Contents/MacOS/rode-editor"
           chmod +x "${APP}/Contents/MacOS/rode-editor"
 
-          # Stamp version into Info.plist and place it
           sed "s/__BUNDLE_VERSION__/${VERSION}/g" \
             src/assets/macos/Info.plist > "${APP}/Contents/Info.plist"
 
-          # Copy the entire src/assets tree so resources.rs can find icons/fonts
-          # at runtime via Contents/Resources/src/assets/
           cp -r src/assets/. "${APP}/Contents/Resources/src/assets/"
 
-          # Optional icon (add assets/macos/AppIcon.icns to your repo later)
           if [ -f "assets/macos/AppIcon.icns" ]; then
             cp assets/macos/AppIcon.icns "${APP}/Contents/Resources/AppIcon.icns"
             /usr/libexec/PlistBuddy -c \
@@ -190,18 +178,18 @@ jobs:
           echo "Bundle layout:"
           find "${APP}" -type f | sort
 
-      # ── tar.gz (used by the self-updater) ─────────────────────────────────
-      - name: Create tar.gz
+      - name: Create zipped .app
+        shell: bash
         run: |
-          tar -czf rode-editor-${VERSION}-macos-universal.tar.gz Rode.app
-          echo "tar.gz: $(du -sh rode-editor-${VERSION}-macos-universal.tar.gz | cut -f1)"
+          ditto -c -k --sequesterRsrc --keepParent \
+            Rode.app \
+            rode-editor-${VERSION}-macos-universal.app.zip
 
-      # ── DMG ───────────────────────────────────────────────────────────────
       - name: Create DMG
+        shell: bash
         run: |
           DMG="rode-editor-${VERSION}-macos-universal.dmg"
 
-          # Build a read-write intermediate DMG
           hdiutil create \
             -volname "Rode" \
             -srcfolder "Rode.app" \
@@ -209,21 +197,11 @@ jobs:
             -format UDRW \
             rode-rw.dmg
 
-          # Mount it
           DEVICE=$(hdiutil attach -readwrite -noverify rode-rw.dmg \
             | grep "^/dev/" | head -n1 | awk '{print $1}')
 
-          # Add Applications symlink so users can drag-install
           ln -sf /Applications "/Volumes/Rode/Applications"
 
-          # Window layout via AppleScript.
-          # ── To add your background image later: ──────────────────────────
-          #   1. Add assets/macos/dmg-background.png to your repo
-          #   2. In the build step above, copy it into the mounted volume:
-          #      mkdir -p /Volumes/Rode/.background
-          #      cp assets/macos/dmg-background.png /Volumes/Rode/.background/
-          #   3. Uncomment the "set background picture" line below
-          # ─────────────────────────────────────────────────────────────────
           osascript << 'APPLESCRIPT'
           tell application "Finder"
             tell disk "Rode"
@@ -235,7 +213,6 @@ jobs:
               set viewOptions to the icon view options of container window
               set arrangement of viewOptions to not arranged
               set icon size of viewOptions to 128
-              -- set background picture of viewOptions to file ".background:dmg-background.png"
               set position of item "Rode.app" of container window to {130, 180}
               set position of item "Applications" of container window to {410, 180}
               close
@@ -248,27 +225,26 @@ jobs:
 
           hdiutil detach "${DEVICE}"
 
-          # Convert to compressed read-only DMG
           hdiutil convert rode-rw.dmg \
             -format UDZO \
             -imagekey zlib-level=9 \
             -o "${DMG}"
 
           rm rode-rw.dmg
-          echo "DMG: $(du -sh ${DMG} | cut -f1)"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binary-macos
           path: |
+            Rode.app
+            rode-editor-${{ env.VERSION }}-macos-universal.app.zip
             rode-editor-${{ env.VERSION }}-macos-universal.dmg
-            rode-editor-${{ env.VERSION }}-macos-universal.tar.gz
           retention-days: 1
 
-  # ── 5. Checksums — runs after all builds ──────────────────────────────────
+  # ── 5. Checksums ───────────────────────────────────────────────────────────
   generate-checksums:
-    needs: [check-version, build-linux, build-windows, build-macos]
+    needs: [check-version, build-archlinux, build-windows, build-macos]
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     env:
@@ -281,13 +257,14 @@ jobs:
           merge-multiple: true
 
       - name: Generate SHA256 checksums
+        shell: bash
         run: |
           cd artifacts/
           sha256sum \
             rode-editor-${VERSION}-macos-universal.dmg \
-            rode-editor-${VERSION}-macos-universal.tar.gz \
-            rode-editor-${VERSION}-linux-x86_64 \
+            rode-editor-${VERSION}-macos-universal.app.zip \
             rode-editor-${VERSION}-windows-x86_64.exe \
+            rode-editor-${VERSION}-archlinux-x86_64 \
             > checksums.txt
           cat checksums.txt
 
@@ -328,23 +305,23 @@ jobs:
             ### Downloads
             | Platform | File |
             |---|---|
-            | macOS Universal (Intel + Apple Silicon) | `rode-editor-${{ env.VERSION }}-macos-universal.dmg` |
-            | macOS (self-updater / scripted install) | `rode-editor-${{ env.VERSION }}-macos-universal.tar.gz` |
-            | Linux x86_64 | `rode-editor-${{ env.VERSION }}-linux-x86_64` |
+            | macOS Universal DMG | `rode-editor-${{ env.VERSION }}-macos-universal.dmg` |
+            | macOS Universal App Bundle | `rode-editor-${{ env.VERSION }}-macos-universal.app.zip` |
             | Windows x86_64 | `rode-editor-${{ env.VERSION }}-windows-x86_64.exe` |
+            | Arch Linux x86_64 | `rode-editor-${{ env.VERSION }}-archlinux-x86_64` |
 
             ### Checksums
             SHA256 checksums are in `checksums.txt`.
 
             ### macOS note
-            This build is not yet notarized. On first launch, right-click → **Open** to bypass Gatekeeper.
+            This build is unsigned. On first launch, you may need to right-click → **Open**.
 
             Commit: ${{ github.sha }}
           files: |
             artifacts/rode-editor-${{ env.VERSION }}-macos-universal.dmg
-            artifacts/rode-editor-${{ env.VERSION }}-macos-universal.tar.gz
-            artifacts/rode-editor-${{ env.VERSION }}-linux-x86_64
+            artifacts/rode-editor-${{ env.VERSION }}-macos-universal.app.zip
             artifacts/rode-editor-${{ env.VERSION }}-windows-x86_64.exe
+            artifacts/rode-editor-${{ env.VERSION }}-archlinux-x86_64
             artifacts/checksums.txt
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -359,20 +336,19 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      # eframe/egui and other deps with system libs need these on the
-      # Ubuntu runner that publishes to crates.io
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libxdo-dev libssl-dev pkg-config
 
       - name: Publish to crates.io
+        shell: bash
         run: |
           cargo login ${{ secrets.CRATES_IO }}
           cargo publish --allow-dirty
           rm -f ~/.cargo/credentials
 
-  # ── 8. Update AUR ─────────────────────────────────────────────────────────
+  # ── 8. Update AUR ──────────────────────────────────────────────────────────
   update-aur:
     needs: [check-version, create-release]
     if: needs.check-version.outputs.should_release == 'true'
@@ -389,6 +365,7 @@ jobs:
 
       - name: Generate PKGBUILD (source build)
         if: matrix.build_from_source
+        shell: bash
         run: |
           cat > PKGBUILD << 'PKGEOF'
           # Maintainer: kashyap <ksukshavasi@gmail.com>
@@ -401,7 +378,7 @@ jobs:
           license=('GPL3')
           depends=()
           makedepends=('rust' 'cargo' 'gtk3' 'pkg-config')
-          source=("$pkgname-$pkgver.tar.gz::https://github.com/kashsuks/rode/archive/v$pkgver.tar.gz")
+          source=("$pkgname-$pkgver.tar.gz::https://github.com/kashsuks/rode/archive/refs/tags/v$pkgver.tar.gz")
           sha256sums=('SKIP')
 
           build() {
@@ -412,14 +389,14 @@ jobs:
           package() {
               cd "$srcdir/rode-$pkgver"
               install -Dm755 "target/release/rode-editor" "$pkgdir/usr/bin/rode-editor"
-              # Install assets so the editor can find icons at runtime
-              install -dm755 "$pkgdir/usr/share/rode-editor"
+              install -dm755 "$pkgdir/usr/share/rode-editor/src"
               cp -r src/assets "$pkgdir/usr/share/rode-editor/src/"
           }
           PKGEOF
 
       - name: Generate PKGBUILD (binary)
         if: ${{ !matrix.build_from_source }}
+        shell: bash
         run: |
           cat > PKGBUILD << 'PKGEOF'
           # Maintainer: kashyap <ksukshavasi@gmail.com>
@@ -433,7 +410,7 @@ jobs:
           depends=()
           provides=('rode-editor')
           conflicts=('rode-editor')
-          source=("rode-editor-$pkgver::https://github.com/kashsuks/rode/releases/download/v$pkgver/rode-editor-$pkgver-linux-x86_64")
+          source=("rode-editor-$pkgver::https://github.com/kashsuks/rode/releases/download/v$pkgver/rode-editor-$pkgver-archlinux-x86_64")
           sha256sums=('SKIP')
 
           package() {
