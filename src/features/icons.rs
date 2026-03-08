@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 /// Base directory for file icons (`src/assets/icons/`)
 fn icons_base() -> PathBuf {
-    crate::resources::resource_dir()
+    crate::features::resources::resource_dir()
         .join("src")
         .join("assets")
         .join("icons")

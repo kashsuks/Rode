@@ -3,8 +3,8 @@ use iced::widget::svg::{Handle, Svg};
 use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Element, Length};
 
-use crate::file_tree::{FileEntry, FileTree};
-use crate::icons::{get_file_icon, get_folder_icon};
+use crate::features::file_tree::{FileEntry, FileTree};
+use crate::features::icons::{get_file_icon, get_folder_icon};
 use crate::message::Message;
 use crate::theme::*;
 use crate::ui::styles::{sidebar_container_style, tree_button_style};

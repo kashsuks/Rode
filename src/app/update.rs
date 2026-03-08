@@ -187,7 +187,7 @@ impl App {
             ),
             Message::FolderOpened(path) => {
                 self.file_tree = Some(FileTree::new(path.clone()));
-                self.all_workspace_files = crate::search::collect_all_files(&path);
+                self.all_workspace_files = crate::features::search::collect_all_files(&path);
                 self.fuzzy_finder.set_folder(path);
                 iced::Task::none()
             }
@@ -296,7 +296,7 @@ impl App {
                 if let Some(ref tree) = self.file_tree {
                     let root = tree.root.clone();
                     iced::Task::perform(
-                        async move { crate::search::search_workspace(&root, &query) },
+                        async move { crate::features::search::search_workspace(&root, &query) },
                         Message::SearchCompleted,
                     )
                 } else {
@@ -343,8 +343,11 @@ impl App {
                 if query.is_empty() {
                     self.file_finder_results.clear();
                 } else {
-                    self.file_finder_results =
-                        crate::search::fuzzy_find_files(&query, &self.all_workspace_files, 20);
+                    self.file_finder_results = crate::features::search::fuzzy_find_files(
+                        &query,
+                        &self.all_workspace_files,
+                        20,
+                    );
                 }
                 iced::widget::operation::focus(self.file_finder_input_id.clone())
             }
@@ -697,9 +700,11 @@ impl App {
                 iced::Task::none()
             }
             Message::CheckForUpdate => {
-                iced::Task::perform(crate::updater::check_for_update(), |result| match result {
-                    Some(info) => Message::UpdateAvailable(info),
-                    None => Message::DismissUpdateBanner,
+                iced::Task::perform(crate::features::updater::check_for_update(), |result| {
+                    match result {
+                        Some(info) => Message::UpdateAvailable(info),
+                        None => Message::DismissUpdateBanner,
+                    }
                 })
             }
             Message::UpdateAvailable(info) => {

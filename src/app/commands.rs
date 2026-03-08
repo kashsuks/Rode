@@ -1,3 +1,23 @@
+//! This module is used for defining some basic commands
+//! Such as opening files, sidebar, terminal access
+//! TODO: More commands for commands access and other
+//!
+//! Example file usage:
+//!
+//! This code is used in `terminal.rs` under the root
+//!
+//! ```rust
+//! "Toggle Terminal" => {
+//!     if let Some(ref tree) = self.file_tree {
+//!         self.terminal.set_directory(tree.root.clone());
+//!     }
+//!     self.terminal.toggle();
+//! }
+//! ```
+//!
+//! A simple implementation is being used to invoke
+//! a command action
+
 use super::*;
 
 impl App {

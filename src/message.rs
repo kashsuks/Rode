@@ -1,4 +1,4 @@
-use crate::search::SearchResult;
+use crate::features::search::SearchResult;
 use iced::widget::text_editor::Action;
 use std::path::PathBuf;
 
@@ -84,6 +84,6 @@ pub enum Message {
 
     // Updater
     CheckForUpdate,
-    UpdateAvailable(crate::updater::UpdateInfo),
+    UpdateAvailable(crate::features::updater::UpdateInfo),
     DismissUpdateBanner,
 }

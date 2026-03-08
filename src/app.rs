@@ -3,24 +3,24 @@
 //! This module defines [`App`] and splits its behavior into focused submodules:
 //! event updates, subscriptions, commands, and view builders.
 
-use iced::keyboard::Key;
 use iced::widget::text_editor::{Action, Content};
 use iced::widget::{
     button, column, container, markdown, mouse_area, row, scrollable, text, text_input,
 };
 use iced::window;
-use iced::{Background, Color, Element, Event, Length, Subscription};
+use iced::{Background, Color, Element, Length, Subscription};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::command_input::CommandInput;
-use crate::command_palette::CommandPalette;
 use crate::config::preferences::{self as prefs, EditorPreferences};
-use crate::file_tree::FileTree;
-use crate::find_replace::FindReplace;
-use crate::fuzzy_finder::FuzzyFinder;
+use crate::features::command_input::CommandInput;
+use crate::features::command_palette::CommandPalette;
+use crate::features::file_tree::FileTree;
+use crate::features::find_replace::FindReplace;
+use crate::features::fuzzy_finder::FuzzyFinder;
+use crate::features::terminal::Terminal;
+use crate::features::updater::UpdateInfo;
 use crate::message::Message;
-use crate::terminal::Terminal;
 use crate::theme::*;
 use crate::ui::{
     create_editor, editor_container_style, empty_editor, file_finder_item_style,
@@ -28,7 +28,6 @@ use crate::ui::{
     sidebar_editor_separator_style, status_bar_style, tab_bar_style, tab_button_style,
     tab_close_button_style, tree_button_style, view_sidebar,
 };
-use crate::updater::UpdateInfo;
 use crate::wakatime::{self, WakaTimeConfig};
 
 mod commands;
@@ -42,40 +41,31 @@ mod view_overlays;
 mod view_root;
 mod view_settings;
 
-/// Supported tab payloads shown in the editor area.
 #[derive(Debug)]
 pub enum TabKind {
-    /// An editable source file.
     Editor {
         content: Content,
         modified: bool,
         scroll_line: usize,
     },
-    /// A markdown preview for an editor tab.
+    /// markdown preview for an editor tab.
     Preview { md_items: Vec<markdown::Item> },
 }
 
-/// Open tab metadata.
 #[derive(Debug)]
 pub struct Tab {
-    /// Absolute file path for the tab.
     pub path: PathBuf,
-    /// Display name shown in the tab bar.
     pub name: String,
-    /// Tab payload.
     pub kind: TabKind,
 }
 
-/// Transient toast notification metadata.
+/// toast notification metadata.
 #[derive(Debug, Clone)]
 pub struct Notification {
-    /// Notification text.
     pub message: String,
-    /// Time when the notification became visible.
     pub shown_at: Instant,
 }
 
-/// Root application state used by `iced`.
 pub struct App {
     tabs: Vec<Tab>,
     active_tab: Option<usize>,
@@ -89,7 +79,7 @@ pub struct App {
     resize_start_width: f32,
     search_visible: bool,
     search_query: String,
-    search_results: Vec<crate::search::SearchResult>,
+    search_results: Vec<crate::features::search::SearchResult>,
     search_input_id: iced::widget::Id,
     file_finder_visible: bool,
     file_finder_query: String,

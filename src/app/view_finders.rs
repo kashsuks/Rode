@@ -55,7 +55,7 @@ impl App {
                 let is_selected = idx == self.fuzzy_finder.selected_index;
                 let path = file.path.clone();
 
-                let icon_str = crate::icons::get_file_icon(
+                let icon_str = crate::features::icons::get_file_icon(
                     file.path
                         .file_name()
                         .unwrap_or_default()

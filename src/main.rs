@@ -2,21 +2,12 @@ use iced::window;
 
 mod app;
 mod autocomplete;
-mod command_input;
-mod command_palette;
 mod config;
-mod file_tree;
-mod find_replace;
-mod fuzzy_finder;
-mod icons;
+mod features;
 mod message;
-mod resources;
-mod search;
-mod syntax;
-mod terminal;
+mod subscriptions;
 mod theme;
 mod ui;
-mod updater;
 mod wakatime;
 
 const FIRA_CODE: &[u8] = include_bytes!("assets/fonts/FiraCode-Regular.ttf");

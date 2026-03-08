@@ -3,8 +3,8 @@ use iced::widget::text_editor::{Binding, Content, KeyPress, Motion, TextEditor};
 use iced::widget::{column, container, row, text};
 use iced::{Background, Border, Element, Length};
 
+use crate::features::syntax::{Settings, VscodeHighlighter};
 use crate::message::Message;
-use crate::syntax::{Settings, VscodeHighlighter};
 use crate::theme::theme;
 use crate::ui::styles::text_editor_style;
 
