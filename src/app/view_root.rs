@@ -23,7 +23,7 @@ impl App {
             }
             editor_col_items.push(status_bar);
 
-            let editor_container = if self.active_tab.is_some() {
+            let editor_container = if self.active_tab.is_some() || self.pending_sensitive_open.is_some() {
                 container(column(editor_col_items))
             } else {
                 self.view_welcome_screen()

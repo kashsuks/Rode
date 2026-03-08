@@ -136,6 +136,43 @@ impl App {
     }
 
     pub(super) fn view_editor(&self) -> Element<'_, Message> {
+        if self.pending_sensitive_open.is_some() {
+            return container(
+                column![
+                    text("You are opening a sensitive file, continue?")
+                        .size(18)
+                        .color(theme().text_muted),
+                    row![
+                        button(text("Yes").size(13))
+                            .on_press(Message::SensitiveFileOpenConfirm(true))
+                            .padding(iced::Padding {
+                                top: 8.0,
+                                right: 16.0,
+                                bottom: 8.0,
+                                left: 16.0,
+                            }),
+                        button(text("No").size(13))
+                            .on_press(Message::SensitiveFileOpenConfirm(false))
+                            .padding(iced::Padding {
+                                top: 8.0,
+                                right: 16.0,
+                                bottom: 8.0,
+                                left: 16.0,
+                            }),
+                    ]
+                    .spacing(12)
+                    .align_y(iced::Alignment::Center),
+                ]
+                .spacing(16)
+                .align_x(iced::Alignment::Center),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+        }
+
         if let Some(idx) = self.active_tab {
             if let Some(tab) = self.tabs.get(idx) {
                 match &tab.kind {

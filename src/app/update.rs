@@ -1,6 +1,23 @@
 use super::*;
 
 impl App {
+    fn should_confirm_sensitive_open(path: &std::path::Path) -> bool {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == ".env" || name.starts_with(".env."))
+    }
+
+    fn open_path_task(path: PathBuf) -> iced::Task<Message> {
+        iced::Task::perform(
+            async move {
+                let content = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|_| String::from("Could not read file"));
+                (path, content)
+            },
+            |(path, content)| Message::FileOpened(path, content),
+        )
+    }
+
     /// Applies a single application message and returns follow-up async work.
     ///
     /// # Arguments
@@ -105,14 +122,11 @@ impl App {
                     self.vim_refresh_cursor_style();
                     return iced::Task::none();
                 }
-                iced::Task::perform(
-                    async move {
-                        let content = std::fs::read_to_string(&path)
-                            .unwrap_or_else(|_| String::from("Could not read file"));
-                        (path, content)
-                    },
-                    |(path, content)| Message::FileOpened(path, content),
-                )
+                if Self::should_confirm_sensitive_open(&path) {
+                    self.pending_sensitive_open = Some(path);
+                    return iced::Task::none();
+                }
+                Self::open_path_task(path)
             }
             Message::TabClosed(idx) => {
                 if idx < self.tabs.len() {
@@ -354,14 +368,11 @@ impl App {
                     self.vim_refresh_cursor_style();
                     return iced::Task::none();
                 }
-                iced::Task::perform(
-                    async move {
-                        let content = std::fs::read_to_string(&path)
-                            .unwrap_or_else(|_| String::from("Could not read file"));
-                        (path, content)
-                    },
-                    |(path, content)| Message::FileOpened(path, content),
-                )
+                if Self::should_confirm_sensitive_open(&path) {
+                    self.pending_sensitive_open = Some(path);
+                    return iced::Task::none();
+                }
+                Self::open_path_task(path)
             }
             Message::ToggleFileFinder => {
                 self.file_finder_visible = !self.file_finder_visible;
@@ -466,6 +477,8 @@ impl App {
             Message::EscapePressed => {
                 if self.command_palette.open {
                     self.command_palette.close();
+                } else if self.pending_sensitive_open.is_some() {
+                    self.pending_sensitive_open = None;
                 } else if self.command_input.open {
                     self.command_input.close();
                 } else if self.find_replace.open {
@@ -491,6 +504,15 @@ impl App {
                     self.vim_count.clear();
                 }
                 self.vim_refresh_cursor_style();
+                iced::Task::none()
+            }
+            Message::SensitiveFileOpenConfirm(confirmed) => {
+                let path = self.pending_sensitive_open.take();
+                if confirmed {
+                    if let Some(path) = path {
+                        return Self::open_path_task(path);
+                    }
+                }
                 iced::Task::none()
             }
             Message::VimKeyPressed(key) => {

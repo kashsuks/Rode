@@ -17,6 +17,7 @@ pub enum Message {
     EditorAction(Action),
     FileClicked(PathBuf),
     FileOpened(PathBuf, String),
+    SensitiveFileOpenConfirm(bool),
     FolderToggled(PathBuf),
     FileTreeRefresh,
     ToggleSidebar,
