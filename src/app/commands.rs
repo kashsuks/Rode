@@ -47,6 +47,7 @@ impl App {
                     name: "untitled".to_string(),
                     kind: TabKind::Editor {
                         content: Content::with_text(""),
+                        buffer: crate::features::editor_buffer::EditorBuffer::from_text(""),
                         modified: false,
                         scroll_line: 1,
                     },

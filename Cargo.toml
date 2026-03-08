@@ -44,3 +44,4 @@ lsp-types = "0.97.0"
 tokio-lsp = "0.1.1"
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "sync", "time"] }
 url = "2.5"
+ropey = "1.6"

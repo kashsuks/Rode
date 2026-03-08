@@ -13,6 +13,7 @@ impl App {
                     if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
                             ref mut content,
+                            ref mut buffer,
                             ref mut modified,
                             ref mut scroll_line,
                         } = tab.kind
@@ -34,6 +35,7 @@ impl App {
                                 *scroll_line = next.clamp(1, max_start);
                             }
                             let _ = content.perform(action);
+                            buffer.set_text(&content.text());
                             *modified = true;
                             let cursor = content.cursor();
                             self.cursor_line = cursor.position.line + 1;
@@ -156,6 +158,7 @@ impl App {
                     name,
                     kind: TabKind::Editor {
                         content: Content::with_text(&content),
+                        buffer: crate::features::editor_buffer::EditorBuffer::from_text(&content),
                         modified: false,
                         scroll_line: 1,
                     },
@@ -549,6 +552,7 @@ impl App {
                                 name,
                                 kind: TabKind::Editor {
                                     content: Content::with_text(&text),
+                                    buffer: crate::features::editor_buffer::EditorBuffer::from_text(&text),
                                     modified: true,
                                     scroll_line,
                                 },
@@ -576,6 +580,7 @@ impl App {
                                 name,
                                 kind: TabKind::Editor {
                                     content: Content::with_text(&text),
+                                    buffer: crate::features::editor_buffer::EditorBuffer::from_text(&text),
                                     modified: true,
                                     scroll_line,
                                 },
@@ -677,6 +682,7 @@ impl App {
                     name: "untitled".to_string(),
                     kind: TabKind::Editor {
                         content: Content::with_text(""),
+                        buffer: crate::features::editor_buffer::EditorBuffer::from_text(""),
                         modified: false,
                         scroll_line: 1,
                     },

@@ -46,6 +46,7 @@ mod view_settings;
 pub enum TabKind {
     Editor {
         content: Content,
+        buffer: crate::features::editor_buffer::EditorBuffer,
         modified: bool,
         scroll_line: usize,
     },

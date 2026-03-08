@@ -2,6 +2,7 @@
 
 pub mod command_input;
 pub mod command_palette;
+pub mod editor_buffer;
 pub mod file_tree;
 pub mod find_replace;
 pub mod fuzzy_finder;
