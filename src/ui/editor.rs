@@ -1,6 +1,6 @@
 use iced::keyboard::{key, Key};
 use iced::widget::text_editor::{Binding, Content, KeyPress, Motion, TextEditor};
-use iced::widget::{column, container, row, text};
+use iced::widget::{column, container, row, stack, text};
 use iced::{Background, Border, Element, Length};
 
 use crate::features::lsp::InlineDiagnostic;
@@ -118,7 +118,45 @@ pub fn create_editor<'a>(
         })
         .height(Length::Fill);
 
-    container(row![gutter, editor].height(Length::Fill))
+    let mut overlay_rows = Vec::with_capacity(end_line - start_line + 1);
+    for line in start_line..=end_line {
+        if let Some(diag) = diagnostics.iter().find(|d| d.line == line) {
+            let color = match diag.severity {
+                lsp_types::DiagnosticSeverity::ERROR => iced::Color::from_rgb(0.95, 0.55, 0.66),
+                lsp_types::DiagnosticSeverity::WARNING => iced::Color::from_rgb(0.98, 0.78, 0.45),
+                _ => theme().text_secondary,
+            };
+
+            overlay_rows.push(
+                container(text(format!("// {}", diag.message)).size(11).color(color))
+                    .width(Length::Fill)
+                    .height(Length::Fixed(20.0))
+                    .align_right(Length::Fill)
+                    .into(),
+            );
+        } else {
+            overlay_rows.push(
+                container(text(""))
+                    .width(Length::Fill)
+                    .height(Length::Fixed(20.0))
+                    .into(),
+            );
+        }
+    }
+
+    let diagnostics_overlay = container(column(overlay_rows).spacing(0))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(iced::Padding {
+            top: 4.0,
+            right: 8.0,
+            bottom: 4.0,
+            left: 8.0,
+        });
+
+    let editor_with_overlay = stack![editor, diagnostics_overlay];
+
+    container(row![gutter, editor_with_overlay].height(Length::Fill))
         .style(|_theme| container::Style {
             background: Some(Background::Color(theme().bg_editor)),
             ..Default::default()

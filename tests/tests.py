@@ -19,5 +19,5 @@ class Main:
         """
         This should produce a syntax error for LSP testing (future)
         """
-        if not in 
+        
 
