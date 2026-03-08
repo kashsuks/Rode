@@ -43,14 +43,17 @@ impl App {
                 }
             }
             "New File" => {
+                let mut editor = iced_code_editor::CodeEditor::new("", "txt");
+                editor.set_search_replace_enabled(false);
+                editor.set_line_numbers_enabled(true);
+                editor.set_wrap_enabled(false);
+                editor.set_font_size(13.0, true);
                 self.tabs.push(Tab {
                     path: PathBuf::from("untitled"),
                     name: "untitled".to_string(),
                     kind: TabKind::Editor {
-                        content: Content::with_text(""),
+                        code_editor: editor,
                         buffer: crate::features::editor_buffer::EditorBuffer::from_text(""),
-                        modified: false,
-                        scroll_line: 1,
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);

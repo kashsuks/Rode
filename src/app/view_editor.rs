@@ -13,7 +13,7 @@ impl App {
             .enumerate()
             .map(|(idx, tab)| {
                 let is_active = self.active_tab == Some(idx);
-                let is_modified = matches!(&tab.kind, TabKind::Editor { modified: true, .. });
+                let is_modified = matches!(&tab.kind, TabKind::Editor { code_editor, .. } if code_editor.is_modified());
                 let close_icon = if is_modified {
                     text("●").size(10).color(theme().text_muted)
                 } else {
@@ -177,24 +177,19 @@ impl App {
             if let Some(tab) = self.tabs.get(idx) {
                 match &tab.kind {
                     TabKind::Editor {
-                        content,
-                        scroll_line,
+                        code_editor,
                         ..
                     } => {
-                        let ext = tab.path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                        let diagnostics = self
-                            .lsp_diagnostics
-                            .get(&tab.path)
-                            .map(Vec::as_slice)
-                            .unwrap_or(&[]);
-                        return create_editor(
-                            content,
-                            ext,
-                            self.cursor_line,
-                            *scroll_line,
-                            diagnostics,
-                            self.vim_mode == VimMode::Normal,
-                        );
+                        return container(
+                            code_editor.view().map(Message::CodeEditorEvent),
+                        )
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(|_theme| container::Style {
+                            background: Some(iced::Background::Color(theme().bg_editor)),
+                            ..Default::default()
+                        })
+                        .into();
                     }
                     TabKind::Preview { md_items } => {
                         return scrollable(

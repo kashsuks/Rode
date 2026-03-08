@@ -25,56 +25,16 @@ impl App {
     /// * `message` - The event to process.
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
-            Message::EditorAction(action) => {
-                if self.vim_mode == VimMode::Normal && matches!(action, Action::Edit(_)) {
-                    self.vim_refresh_cursor_style();
-                    return iced::Task::none();
-                }
-
-                let mut preserve_visual_selection = false;
+            Message::CodeEditorEvent(event) => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
-                            ref mut content,
+                            ref mut code_editor,
                             ref mut buffer,
-                            ref mut modified,
-                            ref mut scroll_line,
                         } = tab.kind
                         {
-                            let action = match action {
-                                Action::Scroll { lines } => Action::Scroll { lines: lines / 5 },
-                                other => other,
-                            };
-                            if let Action::Scroll { lines } = &action {
-                                const VIEWPORT_LINES: usize = 60;
-                                let total_lines = content.line_count().max(1);
-                                let max_start =
-                                    total_lines.saturating_sub(VIEWPORT_LINES - 1).max(1);
-                                let next = if *lines > 0 {
-                                    scroll_line.saturating_add(*lines as usize)
-                                } else {
-                                    scroll_line.saturating_sub(lines.unsigned_abs() as usize)
-                                };
-                                *scroll_line = next.clamp(1, max_start);
-                            }
-                            let _ = content.perform(action);
-                            buffer.set_text(&content.text());
-                            *modified = true;
-                            let cursor = content.cursor();
-                            self.cursor_line = cursor.position.line + 1;
-                            self.cursor_col = cursor.position.column + 1;
-                            preserve_visual_selection = self.vim_mode == VimMode::Normal
-                                && cursor.selection.is_some_and(|sel| sel != cursor.position);
-                            const VIEWPORT_LINES: usize = 60;
-                            if self.cursor_line < *scroll_line {
-                                *scroll_line = self.cursor_line;
-                            } else {
-                                let bottom = scroll_line.saturating_add(VIEWPORT_LINES - 1);
-                                if self.cursor_line > bottom {
-                                    *scroll_line =
-                                        self.cursor_line.saturating_sub(VIEWPORT_LINES - 1);
-                                }
-                            }
+                            let task = code_editor.update(&event);
+                            buffer.set_text(&code_editor.content());
 
                             let entity = tab.path.to_string_lossy().to_string();
                             let should_send =
@@ -95,15 +55,16 @@ impl App {
                                 self.last_wakatime_sent_at = Some(Instant::now());
                             }
 
-                            self.lsp.change_document(tab.path.clone(), content.text());
+                            self.lsp
+                                .change_document(tab.path.clone(), code_editor.content());
+
+                            return task.map(Message::CodeEditorEvent);
                         }
                     }
                 }
-                if !preserve_visual_selection {
-                    self.vim_refresh_cursor_style();
-                }
                 iced::Task::none()
             }
+            Message::CodeEditorContentChanged => iced::Task::none(),
             Message::FolderToggled(path) => {
                 if let Some(ref mut tree) = self.file_tree {
                     tree.toggle_folder(&path);
@@ -181,14 +142,23 @@ impl App {
                     .to_string();
                 let opened_path = path.clone();
                 let opened_text = content.clone();
+                let ext = path.extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("txt")
+                    .to_string();
                 self.tabs.push(Tab {
                     path,
                     name,
                     kind: TabKind::Editor {
-                        content: Content::with_text(&content),
+                        code_editor: {
+                            let mut editor = iced_code_editor::CodeEditor::new(&content, &ext);
+                            editor.set_search_replace_enabled(false);
+                            editor.set_line_numbers_enabled(true);
+                            editor.set_wrap_enabled(false);
+                            editor.set_font_size(13.0, true);
+                            editor
+                        },
                         buffer: crate::features::editor_buffer::EditorBuffer::from_text(&content),
-                        modified: false,
-                        scroll_line: 1,
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
@@ -200,11 +170,9 @@ impl App {
             Message::TabSelected(idx) => {
                 if idx < self.tabs.len() {
                     self.active_tab = Some(idx);
-                    if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor { ref content, .. } = tab.kind {
-                            let cursor = content.cursor();
-                            self.cursor_line = cursor.position.line + 1;
-                            self.cursor_col = cursor.position.column + 1;
+                    if let Some(tab) = self.tabs.get_mut(idx) {
+                        if let TabKind::Editor { ref mut code_editor, .. } = tab.kind {
+                            code_editor.request_focus();
                         }
                     }
                     self.vim_refresh_cursor_style();
@@ -240,7 +208,7 @@ impl App {
             Message::SaveFile => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor { ref content, .. } = tab.kind {
+                        if let TabKind::Editor { ref code_editor, .. } = tab.kind {
                             let entity = tab.path.to_string_lossy().to_string();
                             let _ = wakatime::client::send_heartbeat(&entity, true, &self.wakatime);
                             self.last_wakatime_entity = Some(entity);
@@ -248,7 +216,7 @@ impl App {
 
                             let path = tab.path.clone();
                             self.lsp.save_document(path.clone());
-                            let content = content.text();
+                            let content = code_editor.content();
                             return iced::Task::perform(
                                 async move { std::fs::write(&path, content).map_err(|e| e.to_string()) },
                                 Message::FileSaved,
@@ -264,10 +232,10 @@ impl App {
                 } else if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
-                            ref mut modified, ..
+                            ref mut code_editor, ..
                         } = tab.kind
                         {
-                            *modified = false;
+                            code_editor.mark_saved();
                         }
                     }
                 }
@@ -306,8 +274,8 @@ impl App {
             Message::PreviewMarkdown => {
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor { ref content, .. } = tab.kind {
-                            let text = content.text();
+                        if let TabKind::Editor { ref code_editor, .. } = tab.kind {
+                            let text = code_editor.content();
                             let md_items: Vec<markdown::Item> = markdown::parse(&text).collect();
                             let preview_name = format!("Preview: {}", tab.name);
                             let path = tab.path.clone();
@@ -575,8 +543,8 @@ impl App {
                 self.find_replace.find_text = query;
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor { ref content, .. } = tab.kind {
-                            let text = content.text();
+                        if let TabKind::Editor { ref code_editor, .. } = tab.kind {
+                            let text = code_editor.content();
                             self.find_replace.find_matches(&text);
                         }
                     }
@@ -597,27 +565,17 @@ impl App {
             }
             Message::ReplaceOne => {
                 if let Some(idx) = self.active_tab {
-                    if let Some(tab) = self.tabs.get(idx) {
+                    if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
-                            ref content,
-                            scroll_line,
+                            ref mut code_editor,
+                            ref mut buffer,
                             ..
                         } = tab.kind
                         {
-                            let mut text = content.text();
+                            let mut text = code_editor.content();
                             self.find_replace.replace_next(&mut text);
-                            let path = tab.path.clone();
-                            let name = tab.name.clone();
-                            self.tabs[idx] = Tab {
-                                path,
-                                name,
-                                kind: TabKind::Editor {
-                                    content: Content::with_text(&text),
-                                    buffer: crate::features::editor_buffer::EditorBuffer::from_text(&text),
-                                    modified: true,
-                                    scroll_line,
-                                },
-                            };
+                            let _ = code_editor.reset(&text);
+                            buffer.set_text(&text);
                         }
                     }
                 }
@@ -626,27 +584,17 @@ impl App {
             }
             Message::ReplaceAll => {
                 if let Some(idx) = self.active_tab {
-                    if let Some(tab) = self.tabs.get(idx) {
+                    if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
-                            ref content,
-                            scroll_line,
+                            ref mut code_editor,
+                            ref mut buffer,
                             ..
                         } = tab.kind
                         {
-                            let mut text = content.text();
+                            let mut text = code_editor.content();
                             self.find_replace.replace_all(&mut text);
-                            let path = tab.path.clone();
-                            let name = tab.name.clone();
-                            self.tabs[idx] = Tab {
-                                path,
-                                name,
-                                kind: TabKind::Editor {
-                                    content: Content::with_text(&text),
-                                    buffer: crate::features::editor_buffer::EditorBuffer::from_text(&text),
-                                    modified: true,
-                                    scroll_line,
-                                },
-                            };
+                            let _ = code_editor.reset(&text);
+                            buffer.set_text(&text);
                         }
                     }
                 }
@@ -657,8 +605,8 @@ impl App {
                 self.find_replace.case_sensitive = !self.find_replace.case_sensitive;
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor { ref content, .. } = tab.kind {
-                            let text = content.text();
+                        if let TabKind::Editor { ref code_editor, .. } = tab.kind {
+                            let text = code_editor.content();
                             self.find_replace.find_matches(&text);
                         }
                     }
@@ -743,14 +691,17 @@ impl App {
             }
             Message::NewFile => {
                 let new_path = PathBuf::from("untitled");
+                let mut editor = iced_code_editor::CodeEditor::new("", "txt");
+                editor.set_search_replace_enabled(false);
+                editor.set_line_numbers_enabled(true);
+                editor.set_wrap_enabled(false);
+                editor.set_font_size(13.0, true);
                 self.tabs.push(Tab {
                     path: new_path,
                     name: "untitled".to_string(),
                     kind: TabKind::Editor {
-                        content: Content::with_text(""),
+                        code_editor: editor,
                         buffer: crate::features::editor_buffer::EditorBuffer::from_text(""),
-                        modified: false,
-                        scroll_line: 1,
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);

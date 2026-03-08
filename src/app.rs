@@ -3,7 +3,7 @@
 //! This module defines [`App`] and splits its behavior into focused submodules:
 //! event updates, subscriptions, commands, and view builders.
 
-use iced::widget::text_editor::{Action, Content};
+use iced_code_editor::CodeEditor;
 use iced::widget::{
     button, column, container, markdown, mouse_area, row, scrollable, text, text_input,
 };
@@ -24,7 +24,7 @@ use crate::features::updater::UpdateInfo;
 use crate::message::Message;
 use crate::theme::*;
 use crate::ui::{
-    create_editor, editor_container_style, empty_editor, file_finder_item_style,
+    editor_container_style, empty_editor, file_finder_item_style,
     file_finder_panel_style, search_input_style, search_panel_style,
     sidebar_editor_separator_style, status_bar_style, tab_bar_style, tab_button_style,
     tab_close_button_style, tree_button_style, view_sidebar,
@@ -43,16 +43,22 @@ mod view_overlays;
 mod view_root;
 mod view_settings;
 
-#[derive(Debug)]
 pub enum TabKind {
     Editor {
-        content: Content,
+        code_editor: CodeEditor,
         buffer: crate::features::editor_buffer::EditorBuffer,
-        modified: bool,
-        scroll_line: usize,
     },
     /// markdown preview for an editor tab.
     Preview { md_items: Vec<markdown::Item> },
+}
+
+impl std::fmt::Debug for TabKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TabKind::Editor { .. } => f.debug_struct("Editor").finish_non_exhaustive(),
+            TabKind::Preview { .. } => f.debug_struct("Preview").finish_non_exhaustive(),
+        }
+    }
 }
 
 #[derive(Debug)]

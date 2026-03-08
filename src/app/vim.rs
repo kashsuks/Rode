@@ -1,13 +1,29 @@
 use super::*;
-use iced::widget::text_editor::{Action, Cursor, Motion, Position};
-
-const VIEWPORT_LINES: usize = 60;
+use iced_code_editor::{ArrowDirection, Message as EditorMessage};
 
 impl App {
     pub(super) fn vim_refresh_cursor_style(&mut self) {
+        // With iced-code-editor, vim normal mode removes focus from
+        // the canvas so the user cannot type. Insert mode restores it.
         match self.vim_mode {
-            VimMode::Normal => self.vim_apply_block_cursor(),
-            VimMode::Insert => self.vim_clear_block_cursor(),
+            VimMode::Normal => {
+                if let Some(idx) = self.active_tab {
+                    if let Some(tab) = self.tabs.get_mut(idx) {
+                        if let TabKind::Editor { ref mut code_editor, .. } = tab.kind {
+                            code_editor.lose_focus();
+                        }
+                    }
+                }
+            }
+            VimMode::Insert => {
+                if let Some(idx) = self.active_tab {
+                    if let Some(tab) = self.tabs.get_mut(idx) {
+                        if let TabKind::Editor { ref code_editor, .. } = tab.kind {
+                            code_editor.request_focus();
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -22,7 +38,7 @@ impl App {
                     self.vim_mode = VimMode::Normal;
                     self.vim_pending.clear();
                     self.vim_count.clear();
-                    self.vim_apply_block_cursor();
+                    self.vim_refresh_cursor_style();
                 }
                 iced::Task::none()
             }
@@ -31,14 +47,13 @@ impl App {
                     crate::message::VimKey::Escape => {
                         self.vim_pending.clear();
                         self.vim_count.clear();
-                        self.vim_apply_block_cursor();
                     }
                     crate::message::VimKey::Ctrl(ch) => {
                         self.vim_pending.clear();
-                        self.vim_apply_ctrl_motion(ch);
+                        return self.vim_apply_ctrl_motion(ch);
                     }
                     crate::message::VimKey::Char(ch) => {
-                        self.vim_handle_char(ch);
+                        return self.vim_handle_char(ch);
                     }
                     crate::message::VimKey::Enter | crate::message::VimKey::Backspace => {}
                 }
@@ -57,87 +72,141 @@ impl App {
             && !self.command_input.open
     }
 
-    fn vim_handle_char(&mut self, ch: char) {
+    fn vim_handle_char(&mut self, ch: char) -> iced::Task<Message> {
         if ch.is_ascii_digit() && self.vim_pending.is_empty() {
             if ch == '0' && self.vim_count.is_empty() {
-                self.vim_move_line_start();
+                return self.vim_send_editor_msg(EditorMessage::Home(false));
             } else {
                 self.vim_count.push(ch);
             }
-            return;
+            return iced::Task::none();
         }
 
         if !self.vim_pending.is_empty() {
             let pending = self.vim_pending.clone();
             self.vim_pending.clear();
-            self.vim_dispatch_pending(&pending, ch);
-            return;
+            return self.vim_dispatch_pending(&pending, ch);
         }
 
         match ch {
             'i' => {
                 self.vim_mode = VimMode::Insert;
-                self.vim_clear_block_cursor();
+                self.vim_refresh_cursor_style();
+                iced::Task::none()
             }
-            'h' => self.vim_apply_move(Motion::Left),
-            'j' => self.vim_apply_move(Motion::Down),
-            'k' => self.vim_apply_move(Motion::Up),
-            'l' => self.vim_apply_move(Motion::Right),
-            'w' | 'W' => self.vim_move_word_start_forward(ch == 'W'),
-            'e' | 'E' => self.vim_move_word_end_forward(ch == 'E'),
-            'b' | 'B' => self.vim_move_word_start_backward(ch == 'B'),
+            'a' => {
+                // 'a' in vim: move right one char, then insert
+                let task = self.vim_send_editor_msg(
+                    EditorMessage::ArrowKey(ArrowDirection::Right, false),
+                );
+                self.vim_mode = VimMode::Insert;
+                self.vim_refresh_cursor_style();
+                task
+            }
+            'A' => {
+                let task = self.vim_send_editor_msg(EditorMessage::End(false));
+                self.vim_mode = VimMode::Insert;
+                self.vim_refresh_cursor_style();
+                task
+            }
+            'I' => {
+                let task = self.vim_send_editor_msg(EditorMessage::Home(false));
+                self.vim_mode = VimMode::Insert;
+                self.vim_refresh_cursor_style();
+                task
+            }
+            'o' => {
+                // Open new line below
+                let t1 = self.vim_send_editor_msg(EditorMessage::End(false));
+                let t2 = self.vim_send_editor_msg(EditorMessage::Enter);
+                self.vim_mode = VimMode::Insert;
+                self.vim_refresh_cursor_style();
+                iced::Task::batch([t1, t2])
+            }
+            'O' => {
+                // Open new line above
+                let t1 = self.vim_send_editor_msg(EditorMessage::Home(false));
+                let t2 = self.vim_send_editor_msg(EditorMessage::Enter);
+                let t3 = self.vim_send_editor_msg(
+                    EditorMessage::ArrowKey(ArrowDirection::Up, false),
+                );
+                self.vim_mode = VimMode::Insert;
+                self.vim_refresh_cursor_style();
+                iced::Task::batch([t1, t2, t3])
+            }
+            'h' => self.vim_repeat_motion(ArrowDirection::Left),
+            'j' => self.vim_repeat_motion(ArrowDirection::Down),
+            'k' => self.vim_repeat_motion(ArrowDirection::Up),
+            'l' => self.vim_repeat_motion(ArrowDirection::Right),
+            'w' | 'W' => self.vim_word_motion_forward(ch == 'W'),
+            'e' | 'E' => self.vim_word_motion_end(ch == 'E'),
+            'b' | 'B' => self.vim_word_motion_backward(ch == 'B'),
             '%' => self.vim_match_pair(),
             '^' => self.vim_move_first_nonblank(),
-            '$' => self.vim_move_line_end(),
-            'G' => self.vim_goto_line_or_end(),
-            'H' => self.vim_move_to_screen_top(),
-            'M' => self.vim_move_to_screen_middle(),
-            'L' => self.vim_move_to_screen_bottom(),
+            '$' => self.vim_send_editor_msg(EditorMessage::End(false)),
+            'G' => self.vim_goto_end_or_line(),
+            'x' => {
+                // Delete char under cursor
+                self.vim_count.clear();
+                self.vim_send_editor_msg(EditorMessage::Delete)
+            }
+            'H' | 'M' | 'L' => {
+                // Screen-relative motions - limited support, just use
+                // page-level navigation
+                self.vim_count.clear();
+                iced::Task::none()
+            }
             '{' => self.vim_move_paragraph_prev(),
             '}' => self.vim_move_paragraph_next(),
             ';' => self.vim_repeat_last_find(false),
             ',' => self.vim_repeat_last_find(true),
             'd' => {
-                if !self.vim_delete_selected_range() {
-                    self.vim_count.clear();
-                }
+                self.vim_pending.push('d');
+                iced::Task::none()
             }
             'f' | 'F' | 't' | 'T' | 'g' | 'z' => {
                 self.vim_pending.push(ch);
+                iced::Task::none()
             }
             _ => {
                 self.vim_count.clear();
+                iced::Task::none()
             }
         }
     }
 
-    fn vim_dispatch_pending(&mut self, pending: &str, ch: char) {
+    fn vim_dispatch_pending(&mut self, pending: &str, ch: char) -> iced::Task<Message> {
         match pending {
             "g" => match ch {
-                'j' => self.vim_apply_move(Motion::Down),
-                'k' => self.vim_apply_move(Motion::Up),
                 'g' => {
-                    let count = self.vim_take_count();
-                    self.vim_goto_line(count);
+                    self.vim_count.clear();
+                    self.vim_send_editor_msg(EditorMessage::CtrlHome)
                 }
-                'e' => self.vim_move_word_end_backward(false),
-                'E' => self.vim_move_word_end_backward(true),
-                '_' => self.vim_move_last_nonblank(),
-                'd' => self.vim_goto_declaration(true),
-                'D' => self.vim_goto_declaration(false),
-                _ => {}
+                _ => {
+                    self.vim_count.clear();
+                    iced::Task::none()
+                }
             },
-            "z" => match ch {
-                'z' => self.vim_center_cursor(),
-                't' => self.vim_cursor_top(),
-                'b' => self.vim_cursor_bottom(),
-                _ => {}
+            "z" => {
+                self.vim_count.clear();
+                iced::Task::none()
+            }
+            "d" => match ch {
+                'd' => self.vim_delete_line(),
+                'w' => self.vim_delete_word(),
+                _ => {
+                    self.vim_count.clear();
+                    iced::Task::none()
+                }
             },
-            "f" => self.vim_find_forward(ch, false),
-            "t" => self.vim_find_forward(ch, true),
-            "F" => self.vim_find_backward(ch, false),
-            "T" => self.vim_find_backward(ch, true),
-            _ => {}
+            "f" => self.vim_find_char(ch, false, false),
+            "t" => self.vim_find_char(ch, false, true),
+            "F" => self.vim_find_char(ch, true, false),
+            "T" => self.vim_find_char(ch, true, true),
+            _ => {
+                self.vim_count.clear();
+                iced::Task::none()
+            }
         }
     }
 
@@ -151,627 +220,357 @@ impl App {
         }
     }
 
-    fn vim_apply_move(&mut self, motion: Motion) {
+    /// Send a message to the active tab's CodeEditor and return the resulting Task.
+    fn vim_send_editor_msg(&mut self, msg: EditorMessage) -> iced::Task<Message> {
+        if let Some(idx) = self.active_tab {
+            if let Some(tab) = self.tabs.get_mut(idx) {
+                if let TabKind::Editor {
+                    ref mut code_editor,
+                    ref mut buffer,
+                    ..
+                } = tab.kind
+                {
+                    let task = code_editor.update(&msg);
+                    buffer.set_text(&code_editor.content());
+                    self.lsp
+                        .change_document(tab.path.clone(), code_editor.content());
+                    return task.map(Message::CodeEditorEvent);
+                }
+            }
+        }
+        iced::Task::none()
+    }
+
+    fn vim_repeat_motion(&mut self, dir: ArrowDirection) -> iced::Task<Message> {
         let count = self.vim_take_count();
+        let mut tasks = Vec::with_capacity(count);
         for _ in 0..count {
-            self.vim_apply_action(Action::Move(motion));
+            tasks.push(self.vim_send_editor_msg(
+                EditorMessage::ArrowKey(dir, false),
+            ));
+        }
+        iced::Task::batch(tasks)
+    }
+
+    fn vim_goto_end_or_line(&mut self) -> iced::Task<Message> {
+        let count = self.vim_take_count();
+        if count == 1 && self.vim_count.is_empty() {
+            // G with no count = end of file
+            self.vim_send_editor_msg(EditorMessage::CtrlEnd)
+        } else {
+            // Ngg = go to line N (approximate via CtrlHome + N-1 ArrowDown)
+            let mut tasks = vec![self.vim_send_editor_msg(EditorMessage::CtrlHome)];
+            for _ in 0..count.saturating_sub(1) {
+                tasks.push(self.vim_send_editor_msg(
+                    EditorMessage::ArrowKey(ArrowDirection::Down, false),
+                ));
+            }
+            iced::Task::batch(tasks)
         }
     }
 
-    fn vim_apply_ctrl_motion(&mut self, ch: char) {
+    fn vim_apply_ctrl_motion(&mut self, ch: char) -> iced::Task<Message> {
         match ch {
-            'e' => self.vim_scroll_only(1),
-            'y' => self.vim_scroll_only(-1),
-            'f' => self.vim_page_down(),
-            'b' => self.vim_page_up(),
-            'd' => self.vim_half_page_down(),
-            'u' => self.vim_half_page_up(),
-            _ => {}
-        }
-    }
-
-    fn vim_apply_action(&mut self, action: Action) {
-        if let Some(idx) = self.active_tab {
-            let mut next_cursor: Option<(usize, usize)> = None;
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor {
-                    ref mut content,
-                    ref mut scroll_line,
-                    ..
-                } = tab.kind
-                {
-                    let cursor = content.cursor();
-                    content.move_to(Cursor {
-                        position: cursor.position,
-                        selection: None,
-                    });
-                    content.perform(action);
-                    apply_block_cursor_on_content(content, self.vim_mode == VimMode::Normal);
-                    let cursor = content.cursor().position;
-                    let cl = cursor.line + 1;
-                    let cc = cursor.column + 1;
-                    *scroll_line = ensure_cursor_visible(cl, *scroll_line, content.line_count());
-                    next_cursor = Some((cl, cc));
+            'f' => {
+                self.vim_count.clear();
+                self.vim_send_editor_msg(EditorMessage::PageDown)
+            }
+            'b' => {
+                self.vim_count.clear();
+                self.vim_send_editor_msg(EditorMessage::PageUp)
+            }
+            'd' => {
+                // Half page down: approximate with multiple ArrowDown
+                let half = 30;
+                let mut tasks = Vec::with_capacity(half);
+                for _ in 0..half {
+                    tasks.push(self.vim_send_editor_msg(
+                        EditorMessage::ArrowKey(ArrowDirection::Down, false),
+                    ));
                 }
+                iced::Task::batch(tasks)
             }
-            if let Some((line, col)) = next_cursor {
-                self.cursor_line = line;
-                self.cursor_col = col;
-            }
-        }
-    }
-
-    fn vim_move_to(&mut self, line_1: usize, col_1: usize) {
-        if let Some(idx) = self.active_tab {
-            let mut next_cursor: Option<(usize, usize)> = None;
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor {
-                    ref mut content,
-                    ref mut scroll_line,
-                    ..
-                } = tab.kind
-                {
-                    let line_0 = line_1.saturating_sub(1).min(content.line_count().saturating_sub(1));
-                    let line_text = content
-                        .line(line_0)
-                        .map(|l| l.text.to_string())
-                        .unwrap_or_default();
-                    let max_col = line_text.chars().count();
-                    let col_0 = col_1.saturating_sub(1).min(max_col);
-
-                    content.move_to(Cursor {
-                        position: Position {
-                            line: line_0,
-                            column: col_0,
-                        },
-                        selection: None,
-                    });
-                    apply_block_cursor_on_content(content, self.vim_mode == VimMode::Normal);
-                    *scroll_line = ensure_cursor_visible(line_0 + 1, *scroll_line, content.line_count());
-                    next_cursor = Some((line_0 + 1, col_0 + 1));
+            'u' => {
+                // Half page up
+                let half = 30;
+                let mut tasks = Vec::with_capacity(half);
+                for _ in 0..half {
+                    tasks.push(self.vim_send_editor_msg(
+                        EditorMessage::ArrowKey(ArrowDirection::Up, false),
+                    ));
                 }
+                iced::Task::batch(tasks)
             }
-            if let Some((line, col)) = next_cursor {
-                self.cursor_line = line;
-                self.cursor_col = col;
-            }
+            _ => iced::Task::none(),
         }
     }
 
-    fn vim_snapshot(&self) -> Option<(String, usize, usize)> {
+    // --- Word motions --- //
+
+    fn vim_content_text(&self) -> Option<String> {
         let idx = self.active_tab?;
         let tab = self.tabs.get(idx)?;
-        if let TabKind::Editor { content, .. } = &tab.kind {
-            Some((content.text(), self.cursor_line, self.cursor_col))
+        if let TabKind::Editor { ref code_editor, .. } = tab.kind {
+            Some(code_editor.content())
         } else {
             None
         }
     }
 
-    fn vim_lines(&self) -> Option<Vec<String>> {
-        let (text, _, _) = self.vim_snapshot()?;
-        Some(text.split('\n').map(ToString::to_string).collect())
-    }
-
-    fn vim_move_line_start(&mut self) {
-        self.vim_move_to(self.cursor_line, 1);
-    }
-
-    fn vim_move_first_nonblank(&mut self) {
-        if let Some(lines) = self.vim_lines() {
-            if let Some(line) = lines.get(self.cursor_line.saturating_sub(1)) {
-                let col = line
-                    .chars()
-                    .position(|c| !c.is_whitespace())
-                    .map(|i| i + 1)
-                    .unwrap_or(1);
-                self.vim_move_to(self.cursor_line, col);
-            }
-        }
-    }
-
-    fn vim_move_line_end(&mut self) {
-        if let Some(lines) = self.vim_lines() {
-            if let Some(line) = lines.get(self.cursor_line.saturating_sub(1)) {
-                self.vim_move_to(self.cursor_line, line.chars().count() + 1);
-            }
-        }
-    }
-
-    fn vim_move_last_nonblank(&mut self) {
-        if let Some(lines) = self.vim_lines() {
-            if let Some(line) = lines.get(self.cursor_line.saturating_sub(1)) {
-                let mut idx = None;
-                for (i, c) in line.chars().enumerate() {
-                    if !c.is_whitespace() {
-                        idx = Some(i);
-                    }
-                }
-                self.vim_move_to(self.cursor_line, idx.map(|i| i + 1).unwrap_or(1));
-            }
-        }
-    }
-
-    fn vim_goto_line_or_end(&mut self) {
+    fn vim_word_motion_forward(&mut self, big: bool) -> iced::Task<Message> {
         let count = self.vim_take_count();
-        if count == 1 {
-            if let Some((_, _, _)) = self.vim_snapshot() {
-                let total = self.total_lines();
-                self.vim_goto_line(total);
-            }
-        } else {
-            self.vim_goto_line(count);
-        }
-    }
-
-    fn vim_goto_line(&mut self, line_1: usize) {
-        self.vim_move_to(line_1.max(1).min(self.total_lines()), self.cursor_col);
-    }
-
-    fn total_lines(&self) -> usize {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get(idx) {
-                if let TabKind::Editor { content, .. } = &tab.kind {
-                    return content.line_count().max(1);
-                }
-            }
-        }
-        1
-    }
-
-    fn vim_move_word_start_forward(&mut self, big: bool) {
-        let count = self.vim_take_count();
-        if let Some((text, line, col)) = self.vim_snapshot() {
-            let lines = text.split('\n').collect::<Vec<_>>();
-            let mut idx = position_to_index(&lines, line, col);
-            for _ in 0..count {
-                idx = next_word_start(&text, idx, big);
-            }
-            let (l, c) = index_to_position(&lines, idx);
-            self.vim_move_to(l, c);
-        }
-    }
-
-    fn vim_move_word_end_forward(&mut self, big: bool) {
-        let count = self.vim_take_count();
-        if let Some((text, line, col)) = self.vim_snapshot() {
-            let lines = text.split('\n').collect::<Vec<_>>();
-            let mut idx = position_to_index(&lines, line, col);
-            for _ in 0..count {
-                idx = next_word_end(&text, idx, big);
-            }
-            let (l, c) = index_to_position(&lines, idx);
-            self.vim_move_to(l, c);
-        }
-    }
-
-    fn vim_move_word_start_backward(&mut self, big: bool) {
-        let count = self.vim_take_count();
-        if let Some((text, line, col)) = self.vim_snapshot() {
-            let lines = text.split('\n').collect::<Vec<_>>();
-            let mut idx = position_to_index(&lines, line, col);
-            for _ in 0..count {
-                idx = prev_word_start(&text, idx, big);
-            }
-            let (l, c) = index_to_position(&lines, idx);
-            self.vim_move_to(l, c);
-        }
-    }
-
-    fn vim_move_word_end_backward(&mut self, big: bool) {
-        let count = self.vim_take_count();
-        if let Some((text, line, col)) = self.vim_snapshot() {
-            let lines = text.split('\n').collect::<Vec<_>>();
-            let mut idx = position_to_index(&lines, line, col);
-            for _ in 0..count {
-                idx = prev_word_end(&text, idx, big);
-            }
-            let (l, c) = index_to_position(&lines, idx);
-            self.vim_move_to(l, c);
-        }
-    }
-
-    fn vim_match_pair(&mut self) {
-        if let Some((text, line, col)) = self.vim_snapshot() {
-            let lines = text.split('\n').collect::<Vec<_>>();
-            let idx = position_to_index(&lines, line, col);
-            if let Some(target) = match_pair_index(&text, idx) {
-                let (l, c) = index_to_position(&lines, target);
-                self.vim_move_to(l, c);
-            }
-        }
-    }
-
-    fn vim_find_forward(&mut self, ch: char, till: bool) {
-        self.vim_last_find = Some(VimFindState {
-            kind: if till {
-                VimFindKind::ForwardTill
-            } else {
-                VimFindKind::ForwardTo
-            },
-            needle: ch,
-        });
-        let count = self.vim_take_count();
-        for _ in 0..count {
-            self.vim_find_step(ch, VimFindKind::ForwardTo, till);
-        }
-    }
-
-    fn vim_find_backward(&mut self, ch: char, till: bool) {
-        self.vim_last_find = Some(VimFindState {
-            kind: if till {
-                VimFindKind::BackwardTill
-            } else {
-                VimFindKind::BackwardTo
-            },
-            needle: ch,
-        });
-        let count = self.vim_take_count();
-        for _ in 0..count {
-            self.vim_find_step(ch, VimFindKind::BackwardTo, till);
-        }
-    }
-
-    fn vim_find_step(&mut self, ch: char, dir: VimFindKind, till: bool) {
-        if let Some(lines) = self.vim_lines() {
-            let line_idx = self.cursor_line.saturating_sub(1);
-            if let Some(line) = lines.get(line_idx) {
-                let chars: Vec<char> = line.chars().collect();
-                let cur = self.cursor_col.saturating_sub(1).min(chars.len());
-                match dir {
-                    VimFindKind::ForwardTo | VimFindKind::ForwardTill => {
-                        if let Some(pos) = chars.iter().skip(cur.saturating_add(1)).position(|c| *c == ch) {
-                            let found = cur.saturating_add(1) + pos;
-                            let dest = if till { found.saturating_sub(1) } else { found };
-                            self.vim_move_to(self.cursor_line, dest + 1);
-                        }
-                    }
-                    VimFindKind::BackwardTo | VimFindKind::BackwardTill => {
-                        let mut found = None;
-                        for i in (0..cur).rev() {
-                            if chars[i] == ch {
-                                found = Some(i);
-                                break;
-                            }
-                        }
-                        if let Some(found) = found {
-                            let dest = if till { (found + 1).min(chars.len()) } else { found };
-                            self.vim_move_to(self.cursor_line, dest + 1);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn vim_repeat_last_find(&mut self, reverse: bool) {
-        if let Some(last) = self.vim_last_find {
-            let kind = if reverse {
-                reverse_find(last.kind)
-            } else {
-                last.kind
-            };
-            match kind {
-                VimFindKind::ForwardTo => self.vim_find_step(last.needle, VimFindKind::ForwardTo, false),
-                VimFindKind::ForwardTill => self.vim_find_step(last.needle, VimFindKind::ForwardTo, true),
-                VimFindKind::BackwardTo => self.vim_find_step(last.needle, VimFindKind::BackwardTo, false),
-                VimFindKind::BackwardTill => self.vim_find_step(last.needle, VimFindKind::BackwardTo, true),
-            }
-        }
-    }
-
-    fn vim_move_paragraph_next(&mut self) {
-        if let Some(lines) = self.vim_lines() {
-            let mut i = self.cursor_line;
-            while i < lines.len() && !lines[i.saturating_sub(1)].trim().is_empty() {
-                i += 1;
-            }
-            while i < lines.len() && lines[i.saturating_sub(1)].trim().is_empty() {
-                i += 1;
-            }
-            self.vim_move_to(i.min(lines.len()).max(1), 1);
-        }
-    }
-
-    fn vim_move_paragraph_prev(&mut self) {
-        if let Some(lines) = self.vim_lines() {
-            let mut i = self.cursor_line.saturating_sub(1);
-            while i > 0 && lines[i.saturating_sub(1)].trim().is_empty() {
-                i = i.saturating_sub(1);
-            }
-            while i > 0 && !lines[i.saturating_sub(1)].trim().is_empty() {
-                i = i.saturating_sub(1);
-            }
-            self.vim_move_to(i.max(1), 1);
-        }
-    }
-
-    fn vim_goto_declaration(&mut self, local: bool) {
-        if let Some((text, line, col)) = self.vim_snapshot() {
-            let lines = text.split('\n').collect::<Vec<_>>();
-            let idx = position_to_index(&lines, line, col);
-            let word = word_at_index(&text, idx);
-            if word.is_empty() {
-                return;
-            }
-            let patterns = [
-                format!("let {word}"),
-                format!("const {word}"),
-                format!("fn {word}"),
-                format!("def {word}"),
-                format!("class {word}"),
-                format!("var {word}"),
-            ];
-            let hay = if local { &text[..idx.min(text.len())] } else { &text };
-            let mut found = None;
-            for pat in patterns {
-                if let Some(pos) = hay.rfind(&pat) {
-                    found = Some(pos);
-                    break;
-                }
-            }
-            if let Some(pos) = found {
-                let char_pos = hay[..pos].chars().count();
-                let (l, c) = index_to_position(&lines, char_pos);
-                self.vim_move_to(l, c);
-            }
-        }
-    }
-
-    fn vim_move_to_screen_top(&mut self) {
-        let line = self.current_scroll_line();
-        self.vim_move_to(line, self.cursor_col);
-    }
-
-    fn vim_move_to_screen_middle(&mut self) {
-        let line = self.current_scroll_line().saturating_add(VIEWPORT_LINES / 2);
-        self.vim_move_to(line.min(self.total_lines()), self.cursor_col);
-    }
-
-    fn vim_move_to_screen_bottom(&mut self) {
-        let line = self
-            .current_scroll_line()
-            .saturating_add(VIEWPORT_LINES.saturating_sub(1));
-        self.vim_move_to(line.min(self.total_lines()), self.cursor_col);
-    }
-
-    fn current_scroll_line(&self) -> usize {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get(idx) {
-                if let TabKind::Editor { scroll_line, .. } = tab.kind {
-                    return scroll_line;
-                }
-            }
-        }
-        1
-    }
-
-    fn vim_scroll_only(&mut self, delta: i32) {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor {
-                    ref content,
-                    ref mut scroll_line,
-                    ..
-                } = tab.kind
-                {
-                    let total = content.line_count().max(1);
-                    let max_start = total.saturating_sub(VIEWPORT_LINES - 1).max(1);
-                    let next = if delta > 0 {
-                        scroll_line.saturating_add(delta as usize)
-                    } else {
-                        scroll_line.saturating_sub(delta.unsigned_abs() as usize)
-                    };
-                    *scroll_line = next.clamp(1, max_start);
-                }
-            }
-        }
-    }
-
-    fn vim_page_down(&mut self) {
-        self.vim_scroll_only(VIEWPORT_LINES as i32);
-        let top = self.current_scroll_line();
-        self.vim_move_to(top, self.cursor_col);
-    }
-
-    fn vim_page_up(&mut self) {
-        self.vim_scroll_only(-(VIEWPORT_LINES as i32));
-        let bottom = self
-            .current_scroll_line()
-            .saturating_add(VIEWPORT_LINES.saturating_sub(1));
-        self.vim_move_to(bottom.min(self.total_lines()), self.cursor_col);
-    }
-
-    fn vim_half_page_down(&mut self) {
-        let half = (VIEWPORT_LINES / 2) as i32;
-        self.vim_scroll_only(half);
-        let line = self.cursor_line.saturating_add(half as usize).min(self.total_lines());
-        self.vim_move_to(line, self.cursor_col);
-    }
-
-    fn vim_half_page_up(&mut self) {
-        let half = (VIEWPORT_LINES / 2) as i32;
-        self.vim_scroll_only(-half);
-        let line = self.cursor_line.saturating_sub(half as usize).max(1);
-        self.vim_move_to(line, self.cursor_col);
-    }
-
-    fn vim_center_cursor(&mut self) {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor {
-                    ref content,
-                    ref mut scroll_line,
-                    ..
-                } = tab.kind
-                {
-                    let total = content.line_count().max(1);
-                    let max_start = total.saturating_sub(VIEWPORT_LINES - 1).max(1);
-                    *scroll_line = self
-                        .cursor_line
-                        .saturating_sub(VIEWPORT_LINES / 2)
-                        .clamp(1, max_start);
-                }
-            }
-        }
-    }
-
-    fn vim_cursor_top(&mut self) {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor {
-                    ref mut scroll_line, ..
-                } = tab.kind
-                {
-                    *scroll_line = self.cursor_line.max(1);
-                }
-            }
-        }
-    }
-
-    fn vim_cursor_bottom(&mut self) {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor {
-                    ref content,
-                    ref mut scroll_line,
-                    ..
-                } = tab.kind
-                {
-                    let total = content.line_count().max(1);
-                    let max_start = total.saturating_sub(VIEWPORT_LINES - 1).max(1);
-                    *scroll_line = self
-                        .cursor_line
-                        .saturating_sub(VIEWPORT_LINES.saturating_sub(1))
-                        .clamp(1, max_start);
-                }
-            }
-        }
-    }
-
-    fn vim_apply_block_cursor(&mut self) {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor { ref mut content, .. } = tab.kind {
-                    apply_block_cursor_on_content(content, true);
-                    let cursor = content.cursor().position;
-                    self.cursor_line = cursor.line + 1;
-                    self.cursor_col = cursor.column + 1;
-                }
-            }
-        }
-    }
-
-    fn vim_clear_block_cursor(&mut self) {
-        if let Some(idx) = self.active_tab {
-            if let Some(tab) = self.tabs.get_mut(idx) {
-                if let TabKind::Editor { ref mut content, .. } = tab.kind {
-                    let cursor = content.cursor();
-                    content.move_to(Cursor {
-                        position: cursor.position,
-                        selection: None,
-                    });
-                    let cursor = content.cursor().position;
-                    self.cursor_line = cursor.line + 1;
-                    self.cursor_col = cursor.column + 1;
-                }
-            }
-        }
-    }
-
-    fn vim_delete_selected_range(&mut self) -> bool {
-        let Some(idx) = self.active_tab else {
-            return false;
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
         };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut idx = position_to_index(&lines, self.cursor_line, self.cursor_col);
+        for _ in 0..count {
+            idx = next_word_start(&text, idx, big);
+        }
+        let (target_line, target_col) = index_to_position(&lines, idx);
+        self.vim_goto_position(target_line, target_col)
+    }
 
-        let mut lsp_update: Option<(std::path::PathBuf, String)> = None;
+    fn vim_word_motion_end(&mut self, big: bool) -> iced::Task<Message> {
+        let count = self.vim_take_count();
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut idx = position_to_index(&lines, self.cursor_line, self.cursor_col);
+        for _ in 0..count {
+            idx = next_word_end(&text, idx, big);
+        }
+        let (target_line, target_col) = index_to_position(&lines, idx);
+        self.vim_goto_position(target_line, target_col)
+    }
 
-        if let Some(tab) = self.tabs.get_mut(idx) {
-            if let TabKind::Editor {
-                ref mut content,
-                ref mut buffer,
-                ref mut modified,
-                ref mut scroll_line,
-            } = tab.kind
-            {
-                let cursor = content.cursor();
-                let Some(anchor) = cursor.selection else {
-                    return false;
-                };
-                let head = cursor.position;
-                if head == anchor {
-                    return false;
+    fn vim_word_motion_backward(&mut self, big: bool) -> iced::Task<Message> {
+        let count = self.vim_take_count();
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut idx = position_to_index(&lines, self.cursor_line, self.cursor_col);
+        for _ in 0..count {
+            idx = prev_word_start(&text, idx, big);
+        }
+        let (target_line, target_col) = index_to_position(&lines, idx);
+        self.vim_goto_position(target_line, target_col)
+    }
+
+    fn vim_match_pair(&mut self) -> iced::Task<Message> {
+        self.vim_count.clear();
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let idx = position_to_index(&lines, self.cursor_line, self.cursor_col);
+        if let Some(target) = match_pair_index(&text, idx) {
+            let (l, c) = index_to_position(&lines, target);
+            self.vim_goto_position(l, c)
+        } else {
+            iced::Task::none()
+        }
+    }
+
+    fn vim_move_first_nonblank(&mut self) -> iced::Task<Message> {
+        self.vim_count.clear();
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let line_idx = self.cursor_line.saturating_sub(1).min(lines.len().saturating_sub(1));
+        if let Some(line) = lines.get(line_idx) {
+            let col = line
+                .chars()
+                .position(|c| !c.is_whitespace())
+                .map(|i| i + 1)
+                .unwrap_or(1);
+            self.vim_goto_position(self.cursor_line, col)
+        } else {
+            iced::Task::none()
+        }
+    }
+
+    fn vim_move_paragraph_next(&mut self) -> iced::Task<Message> {
+        self.vim_count.clear();
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut i = self.cursor_line;
+        while i < lines.len() && !lines[i.saturating_sub(1)].trim().is_empty() {
+            i += 1;
+        }
+        while i < lines.len() && lines[i.saturating_sub(1)].trim().is_empty() {
+            i += 1;
+        }
+        self.vim_goto_position(i.min(lines.len()).max(1), 1)
+    }
+
+    fn vim_move_paragraph_prev(&mut self) -> iced::Task<Message> {
+        self.vim_count.clear();
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut i = self.cursor_line.saturating_sub(1);
+        while i > 0 && lines[i.saturating_sub(1)].trim().is_empty() {
+            i = i.saturating_sub(1);
+        }
+        while i > 0 && !lines[i.saturating_sub(1)].trim().is_empty() {
+            i = i.saturating_sub(1);
+        }
+        self.vim_goto_position(i.max(1), 1)
+    }
+
+    /// Move cursor to an absolute position using CtrlHome + arrow keys.
+    fn vim_goto_position(&mut self, target_line: usize, target_col: usize) -> iced::Task<Message> {
+        let mut tasks = vec![self.vim_send_editor_msg(EditorMessage::CtrlHome)];
+        let line_moves = target_line.saturating_sub(1);
+        for _ in 0..line_moves {
+            tasks.push(self.vim_send_editor_msg(
+                EditorMessage::ArrowKey(ArrowDirection::Down, false),
+            ));
+        }
+        // Use Home to ensure we're at column 1, then move to the target column
+        tasks.push(self.vim_send_editor_msg(EditorMessage::Home(false)));
+        let col_moves = target_col.saturating_sub(1);
+        for _ in 0..col_moves {
+            tasks.push(self.vim_send_editor_msg(
+                EditorMessage::ArrowKey(ArrowDirection::Right, false),
+            ));
+        }
+        self.cursor_line = target_line;
+        self.cursor_col = target_col;
+        iced::Task::batch(tasks)
+    }
+
+    // --- Find char motions --- //
+
+    fn vim_find_char(
+        &mut self,
+        ch: char,
+        backward: bool,
+        till: bool,
+    ) -> iced::Task<Message> {
+        self.vim_last_find = Some(VimFindState {
+            kind: match (backward, till) {
+                (false, false) => VimFindKind::ForwardTo,
+                (false, true) => VimFindKind::ForwardTill,
+                (true, false) => VimFindKind::BackwardTo,
+                (true, true) => VimFindKind::BackwardTill,
+            },
+            needle: ch,
+        });
+        let count = self.vim_take_count();
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let line_idx = self.cursor_line.saturating_sub(1).min(lines.len().saturating_sub(1));
+        let Some(line) = lines.get(line_idx) else {
+            return iced::Task::none();
+        };
+        let chars: Vec<char> = line.chars().collect();
+        let cur = self.cursor_col.saturating_sub(1).min(chars.len());
+
+        let mut result_col = None;
+        if !backward {
+            let mut found_count = 0;
+            for (pos, &c) in chars.iter().enumerate().skip(cur.saturating_add(1)) {
+                if c == ch {
+                    found_count += 1;
+                    if found_count == count {
+                        result_col = Some(if till { pos.saturating_sub(1) } else { pos });
+                        break;
+                    }
                 }
-
-                let text = content.text();
-                let lines: Vec<&str> = text.split('\n').collect();
-                let a = position_to_index(&lines, anchor.line + 1, anchor.column + 1);
-                let b = position_to_index(&lines, head.line + 1, head.column + 1);
-                let start = a.min(b);
-                let end = a.max(b);
-                if start >= end {
-                    return false;
+            }
+        } else {
+            let mut found_count = 0;
+            for i in (0..cur).rev() {
+                if chars[i] == ch {
+                    found_count += 1;
+                    if found_count == count {
+                        result_col = Some(
+                            if till { (i + 1).min(chars.len()) } else { i },
+                        );
+                        break;
+                    }
                 }
-
-                let start_byte = char_to_byte_index(&text, start);
-                let end_byte = char_to_byte_index(&text, end);
-                let mut new_text = text;
-                new_text.replace_range(start_byte..end_byte, "");
-
-                *content = iced::widget::text_editor::Content::with_text(&new_text);
-                buffer.set_text(&new_text);
-                *modified = true;
-
-                let new_lines: Vec<&str> = new_text.split('\n').collect();
-                let (line_1, col_1) = index_to_position(&new_lines, start);
-                content.move_to(Cursor {
-                    position: Position {
-                        line: line_1.saturating_sub(1),
-                        column: col_1.saturating_sub(1),
-                    },
-                    selection: None,
-                });
-                apply_block_cursor_on_content(content, self.vim_mode == VimMode::Normal);
-
-                let pos = content.cursor().position;
-                self.cursor_line = pos.line + 1;
-                self.cursor_col = pos.column + 1;
-                *scroll_line = ensure_cursor_visible(self.cursor_line, *scroll_line, content.line_count());
-
-                lsp_update = Some((tab.path.clone(), new_text));
             }
         }
 
-        if let Some((path, text)) = lsp_update {
-            self.lsp.change_document(path, text);
-        }
-
-        true
-    }
-}
-
-fn ensure_cursor_visible(cursor_line: usize, scroll_line: usize, total_lines: usize) -> usize {
-    let max_start = total_lines.saturating_sub(VIEWPORT_LINES - 1).max(1);
-    if cursor_line < scroll_line {
-        cursor_line
-    } else {
-        let bottom = scroll_line.saturating_add(VIEWPORT_LINES - 1);
-        if cursor_line > bottom {
-            cursor_line.saturating_sub(VIEWPORT_LINES - 1).clamp(1, max_start)
+        if let Some(col) = result_col {
+            self.vim_goto_position(self.cursor_line, col + 1)
         } else {
-            scroll_line.clamp(1, max_start)
+            iced::Task::none()
         }
+    }
+
+    fn vim_repeat_last_find(&mut self, reverse: bool) -> iced::Task<Message> {
+        if let Some(last) = self.vim_last_find {
+            let (backward, till) = if reverse {
+                match last.kind {
+                    VimFindKind::ForwardTo => (true, false),
+                    VimFindKind::ForwardTill => (true, true),
+                    VimFindKind::BackwardTo => (false, false),
+                    VimFindKind::BackwardTill => (false, true),
+                }
+            } else {
+                match last.kind {
+                    VimFindKind::ForwardTo => (false, false),
+                    VimFindKind::ForwardTill => (false, true),
+                    VimFindKind::BackwardTo => (true, false),
+                    VimFindKind::BackwardTill => (true, true),
+                }
+            };
+            self.vim_find_char(last.needle, backward, till)
+        } else {
+            iced::Task::none()
+        }
+    }
+
+    // --- Delete operations --- //
+
+    fn vim_delete_line(&mut self) -> iced::Task<Message> {
+        self.vim_count.clear();
+        // Select entire current line and delete it
+        let t1 = self.vim_send_editor_msg(EditorMessage::Home(false));
+        // Select to end of line
+        let t2 = self.vim_send_editor_msg(EditorMessage::End(true));
+        // Delete the selection
+        let t3 = self.vim_send_editor_msg(EditorMessage::Backspace);
+        // Delete the remaining newline
+        let t4 = self.vim_send_editor_msg(EditorMessage::Backspace);
+        iced::Task::batch([t1, t2, t3, t4])
+    }
+
+    fn vim_delete_word(&mut self) -> iced::Task<Message> {
+        self.vim_count.clear();
+        // Approximate: select word forward with shift+right arrows then delete
+        let Some(text) = self.vim_content_text() else {
+            return iced::Task::none();
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let idx = position_to_index(&lines, self.cursor_line, self.cursor_col);
+        let end = next_word_start(&text, idx, false);
+        let chars_to_select = end.saturating_sub(idx);
+
+        let mut tasks = Vec::with_capacity(chars_to_select + 1);
+        for _ in 0..chars_to_select {
+            tasks.push(self.vim_send_editor_msg(
+                EditorMessage::ArrowKey(ArrowDirection::Right, true),
+            ));
+        }
+        tasks.push(self.vim_send_editor_msg(EditorMessage::Backspace));
+        iced::Task::batch(tasks)
     }
 }
 
-fn reverse_find(kind: VimFindKind) -> VimFindKind {
-    match kind {
-        VimFindKind::ForwardTo => VimFindKind::BackwardTo,
-        VimFindKind::ForwardTill => VimFindKind::BackwardTill,
-        VimFindKind::BackwardTo => VimFindKind::ForwardTo,
-        VimFindKind::BackwardTill => VimFindKind::ForwardTill,
-    }
-}
+// --- Helper functions (preserved from original) --- //
 
 fn is_word_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '_'
@@ -858,25 +657,6 @@ fn prev_word_start(text: &str, idx: usize, big: bool) -> usize {
     i
 }
 
-fn prev_word_end(text: &str, idx: usize, big: bool) -> usize {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.is_empty() {
-        return 0;
-    }
-    let mut i = idx.saturating_sub(1).min(chars.len().saturating_sub(1));
-    while i > 0 && chars[i].is_whitespace() {
-        i -= 1;
-    }
-    if big {
-        i
-    } else {
-        while i + 1 < chars.len() && is_word_char(chars[i + 1]) {
-            i += 1;
-        }
-        i
-    }
-}
-
 fn match_pair_index(text: &str, idx: usize) -> Option<usize> {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
@@ -919,66 +699,4 @@ fn match_pair_index(text: &str, idx: usize) -> Option<usize> {
         }
     }
     None
-}
-
-fn word_at_index(text: &str, idx: usize) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.is_empty() {
-        return String::new();
-    }
-    let i = idx.min(chars.len().saturating_sub(1));
-    if !is_word_char(chars[i]) {
-        return String::new();
-    }
-    let mut start = i;
-    while start > 0 && is_word_char(chars[start - 1]) {
-        start -= 1;
-    }
-    let mut end = i;
-    while end + 1 < chars.len() && is_word_char(chars[end + 1]) {
-        end += 1;
-    }
-    chars[start..=end].iter().collect()
-}
-
-fn char_to_byte_index(text: &str, char_idx: usize) -> usize {
-    if char_idx == 0 {
-        return 0;
-    }
-    text.char_indices()
-        .nth(char_idx)
-        .map(|(i, _)| i)
-        .unwrap_or(text.len())
-}
-
-fn apply_block_cursor_on_content(content: &mut iced::widget::text_editor::Content, enabled: bool) {
-    let cursor = content.cursor();
-    let line = cursor.position.line;
-    let mut col = cursor.position.column;
-
-    let line_text = content
-        .line(line)
-        .map(|l| l.text.to_string())
-        .unwrap_or_default();
-    let len = line_text.chars().count();
-
-    if !enabled || len == 0 {
-        content.move_to(Cursor {
-            position: Position { line, column: col.min(len) },
-            selection: None,
-        });
-        return;
-    }
-
-    if col >= len {
-        col = len.saturating_sub(1);
-    }
-
-    content.move_to(Cursor {
-        position: Position { line, column: col },
-        selection: Some(Position {
-            line,
-            column: (col + 1).min(len),
-        }),
-    });
 }
