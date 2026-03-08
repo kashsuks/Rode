@@ -2,6 +2,15 @@ use crate::features::search::SearchResult;
 use iced::widget::text_editor::Action;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Copy)]
+pub enum VimKey {
+    Char(char),
+    Ctrl(char),
+    Escape,
+    Enter,
+    Backspace,
+}
+
 #[derive(Debug, Clone)]
 pub enum Message {
     /// Text editing stuff
@@ -83,6 +92,7 @@ pub enum Message {
     SaveWakaTimeSettings,
 
     DismissNotification,
+    VimKeyPressed(VimKey),
     LspTick,
 
     // Updater

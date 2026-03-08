@@ -38,6 +38,7 @@ impl App {
             "Find and Replace" => {
                 self.find_replace.toggle();
                 if self.find_replace.open {
+                    self.vim_refresh_cursor_style();
                     return iced::widget::operation::focus(self.find_input_id.clone());
                 }
             }
@@ -53,6 +54,7 @@ impl App {
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
+                self.vim_refresh_cursor_style();
             }
             "Save File" => {
                 return iced::Task::perform(async {}, |_| Message::SaveFile);
@@ -73,6 +75,7 @@ impl App {
             }
             _ => {}
         }
+        self.vim_refresh_cursor_style();
         iced::Task::none()
     }
 }

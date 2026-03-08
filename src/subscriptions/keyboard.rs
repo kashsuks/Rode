@@ -1,6 +1,6 @@
 //! Keyboard event subscription handlers.
 
-use crate::message::Message;
+use crate::message::{Message, VimKey};
 use iced::keyboard::Key;
 use iced::window;
 use iced::{Event, Subscription};
@@ -10,7 +10,6 @@ pub fn shortcuts() -> Subscription<Message> {
     iced::event::listen_with(|event, _status, _id| match event {
         Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. }) => {
             let navigation_msg = match &key {
-                Key::Named(iced::keyboard::key::Named::Escape) => Some(Message::EscapePressed),
                 Key::Named(iced::keyboard::key::Named::ArrowUp) => {
                     Some(Message::FuzzyFinderNavigate(-1))
                 }
@@ -50,6 +49,33 @@ pub fn shortcuts() -> Subscription<Message> {
                         "n" => return Some(Message::NewFile),
                         _ => {}
                     }
+                } else if modifiers.control() {
+                    let lower = c.to_lowercase();
+                    if let Some(ch) = lower.chars().next() {
+                        match ch {
+                            'e' | 'y' | 'b' | 'f' | 'd' | 'u' => {
+                                return Some(Message::VimKeyPressed(VimKey::Ctrl(ch)));
+                            }
+                            _ => {}
+                        }
+                    }
+                } else if let Some(ch) = c.chars().next() {
+                    return Some(Message::VimKeyPressed(VimKey::Char(ch)));
+                }
+            }
+
+            if !modifiers.command() && !modifiers.control() {
+                match key {
+                    Key::Named(iced::keyboard::key::Named::Escape) => {
+                        return Some(Message::VimKeyPressed(VimKey::Escape));
+                    }
+                    Key::Named(iced::keyboard::key::Named::Enter) => {
+                        return Some(Message::VimKeyPressed(VimKey::Enter));
+                    }
+                    Key::Named(iced::keyboard::key::Named::Backspace) => {
+                        return Some(Message::VimKeyPressed(VimKey::Backspace));
+                    }
+                    _ => {}
                 }
             }
 

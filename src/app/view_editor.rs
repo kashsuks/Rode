@@ -156,6 +156,7 @@ impl App {
                             self.cursor_line,
                             *scroll_line,
                             diagnostics,
+                            self.vim_mode == VimMode::Normal,
                         );
                     }
                     TabKind::Preview { md_items } => {
@@ -187,6 +188,19 @@ impl App {
         let left = row![text(file_info).size(10).color(theme().text_dim),]
             .spacing(8)
             .align_y(iced::Alignment::Center);
+        let vim_mode_label = match self.vim_mode {
+            VimMode::Normal => "NORMAL",
+            VimMode::Insert => "INSERT",
+        };
+        let vim_state = if self.vim_pending.is_empty() && self.vim_count.is_empty() {
+            vim_mode_label.to_string()
+        } else {
+            format!(
+                "{vim_mode_label} {}{}",
+                self.vim_count,
+                self.vim_pending
+            )
+        };
 
         let current_line_diag = self
             .active_tab
@@ -198,6 +212,7 @@ impl App {
             .unwrap_or_default();
 
         let right = row![
+            text(vim_state).size(10).color(theme().text_muted),
             text(format!("Ln {}, Col {}", self.cursor_line, self.cursor_col))
                 .size(10)
                 .color(theme().text_placeholder),

@@ -9,6 +9,12 @@ impl App {
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
             Message::EditorAction(action) => {
+                if self.vim_mode == VimMode::Normal && matches!(action, Action::Edit(_)) {
+                    self.vim_refresh_cursor_style();
+                    return iced::Task::none();
+                }
+
+                let mut preserve_visual_selection = false;
                 if let Some(idx) = self.active_tab {
                     if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
@@ -40,6 +46,8 @@ impl App {
                             let cursor = content.cursor();
                             self.cursor_line = cursor.position.line + 1;
                             self.cursor_col = cursor.position.column + 1;
+                            preserve_visual_selection = self.vim_mode == VimMode::Normal
+                                && cursor.selection.is_some_and(|sel| sel != cursor.position);
                             const VIEWPORT_LINES: usize = 60;
                             if self.cursor_line < *scroll_line {
                                 *scroll_line = self.cursor_line;
@@ -74,6 +82,9 @@ impl App {
                         }
                     }
                 }
+                if !preserve_visual_selection {
+                    self.vim_refresh_cursor_style();
+                }
                 iced::Task::none()
             }
             Message::FolderToggled(path) => {
@@ -91,6 +102,7 @@ impl App {
                 }
                 if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
                     self.active_tab = Some(idx);
+                    self.vim_refresh_cursor_style();
                     return iced::Task::none();
                 }
                 iced::Task::perform(
@@ -118,6 +130,7 @@ impl App {
                         }
                     }
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::CloseActiveTab => {
@@ -132,6 +145,7 @@ impl App {
                         self.active_tab = Some(self.tabs.len() - 1);
                     }
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::FileOpened(path, content) => {
@@ -164,6 +178,7 @@ impl App {
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
+                self.vim_refresh_cursor_style();
 
                 self.lsp.open_document(opened_path, opened_text);
                 iced::Task::none()
@@ -178,6 +193,7 @@ impl App {
                             self.cursor_col = cursor.position.column + 1;
                         }
                     }
+                    self.vim_refresh_cursor_style();
                 }
                 iced::Task::none()
             }
@@ -300,8 +316,10 @@ impl App {
                     self.search_results.clear();
                 } else {
                     self.search_visible = true;
+                    self.vim_refresh_cursor_style();
                     return iced::widget::operation::focus(self.search_input_id.clone());
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::SearchQueryChanged(query) => {
@@ -333,6 +351,7 @@ impl App {
                 }
                 if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
                     self.active_tab = Some(idx);
+                    self.vim_refresh_cursor_style();
                     return iced::Task::none();
                 }
                 iced::Task::perform(
@@ -350,8 +369,10 @@ impl App {
                     self.file_finder_query.clear();
                     self.file_finder_results.clear();
                     self.file_finder_selected = 0;
+                    self.vim_refresh_cursor_style();
                     return iced::Task::none();
                 }
+                self.vim_refresh_cursor_style();
                 iced::widget::operation::focus(self.file_finder_input_id.clone())
             }
             Message::FileFinderQueryChanged(query) => {
@@ -408,10 +429,12 @@ impl App {
             Message::ToggleFuzzyFinder => {
                 if self.fuzzy_finder.open {
                     self.fuzzy_finder.close();
+                    self.vim_refresh_cursor_style();
                     iced::Task::none()
                 } else {
                     self.fuzzy_finder.toggle();
                     self.fuzzy_finder.update_preview();
+                    self.vim_refresh_cursor_style();
                     iced::widget::operation::focus(self.fuzzy_finder.input_id.clone())
                 }
             }
@@ -462,15 +485,29 @@ impl App {
                     self.theme_dropdown_open = false;
                 } else if self.settings_open {
                     self.settings_open = false;
+                } else {
+                    self.vim_mode = VimMode::Normal;
+                    self.vim_pending.clear();
+                    self.vim_count.clear();
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
+            }
+            Message::VimKeyPressed(key) => {
+                if matches!(key, crate::message::VimKey::Escape) && !self.vim_context_active() {
+                    self.update(Message::EscapePressed)
+                } else {
+                    self.handle_vim_key(key)
+                }
             }
             Message::ToggleCommandPalette => {
                 self.command_palette.toggle();
                 self.command_palette_selected = 0;
                 if self.command_palette.open {
+                    self.vim_refresh_cursor_style();
                     return iced::widget::operation::focus(self.command_palette_input_id.clone());
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::CommandPaletteQueryChanged(query) => {
@@ -506,8 +543,10 @@ impl App {
             Message::ToggleFindReplace => {
                 self.find_replace.toggle();
                 if self.find_replace.open {
+                    self.vim_refresh_cursor_style();
                     return iced::widget::operation::focus(self.find_input_id.clone());
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::FindQueryChanged(query) => {
@@ -560,6 +599,7 @@ impl App {
                         }
                     }
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::ReplaceAll => {
@@ -588,6 +628,7 @@ impl App {
                         }
                     }
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::ToggleCaseSensitive => {
@@ -605,6 +646,7 @@ impl App {
             Message::ToggleSettings => {
                 self.settings_open = !self.settings_open;
                 self.theme_dropdown_open = false;
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::SettingsNavigate(section) => {
@@ -659,8 +701,10 @@ impl App {
                     self.command_input.close();
                 } else {
                     self.command_input.open();
+                    self.vim_refresh_cursor_style();
                     return iced::widget::operation::focus(self.command_input_id.clone());
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::CommandInputChanged(input) => {
@@ -688,6 +732,7 @@ impl App {
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::SaveAs => iced::Task::perform(
@@ -731,6 +776,7 @@ impl App {
                 for update in self.lsp.drain_updates() {
                     self.lsp_diagnostics.insert(update.path, update.diagnostics);
                 }
+                self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
             Message::CheckForUpdate => {

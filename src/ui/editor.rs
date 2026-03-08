@@ -17,6 +17,7 @@ pub fn create_editor<'a>(
     current_line: usize,
     scroll_line: usize,
     diagnostics: &[InlineDiagnostic],
+    vim_normal_mode: bool,
 ) -> Element<'a, Message> {
     let total_lines = content.line_count().max(1);
     let active_line = current_line.clamp(1, total_lines);
@@ -102,7 +103,7 @@ pub fn create_editor<'a>(
 
     let editor = TextEditor::new(content)
         .on_action(Message::EditorAction)
-        .key_binding(editor_key_bindings)
+        .key_binding(move |kp| editor_key_bindings(kp, vim_normal_mode))
         .highlight_with::<VscodeHighlighter>(
             Settings {
                 extension: extension.to_string(),
@@ -164,7 +165,18 @@ pub fn create_editor<'a>(
         .into()
 }
 
-fn editor_key_bindings(key_press: KeyPress) -> Option<Binding<Message>> {
+fn editor_key_bindings(key_press: KeyPress, vim_normal_mode: bool) -> Option<Binding<Message>> {
+    // In Normal mode, the text_editor must not process any keyboard events.
+    // All keyboard handling goes through our Vim subscription instead.
+    if vim_normal_mode {
+        return None;
+    }
+
+    // Never let the text_editor widget handle Escape; our Vim layer owns it.
+    if matches!(key_press.key.as_ref(), Key::Named(key::Named::Escape)) {
+        return None;
+    }
+
     let modifiers = key_press.modifiers;
 
     if let Key::Character(_c) = key_press.key.as_ref() {

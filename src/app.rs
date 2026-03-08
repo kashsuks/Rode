@@ -35,6 +35,7 @@ mod commands;
 mod lifecycle;
 mod subscription;
 mod update;
+mod vim;
 mod view_editor;
 mod view_finders;
 mod view_integrations;
@@ -66,6 +67,26 @@ pub struct Tab {
 pub struct Notification {
     pub message: String,
     pub shown_at: Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VimMode {
+    Normal,
+    Insert,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum VimFindKind {
+    ForwardTo,
+    ForwardTill,
+    BackwardTo,
+    BackwardTill,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VimFindState {
+    pub kind: VimFindKind,
+    pub needle: char,
 }
 
 pub struct App {
@@ -113,6 +134,10 @@ pub struct App {
     update_banner: Option<UpdateInfo>,
     lsp: crate::features::lsp::LspBridge,
     lsp_diagnostics: HashMap<PathBuf, Vec<crate::features::lsp::InlineDiagnostic>>,
+    vim_mode: VimMode,
+    vim_pending: String,
+    vim_count: String,
+    vim_last_find: Option<VimFindState>,
 }
 
 impl Default for App {
@@ -186,6 +211,10 @@ impl Default for App {
             update_banner: None,
             lsp: crate::features::lsp::LspBridge::new(None),
             lsp_diagnostics: HashMap::new(),
+            vim_mode: VimMode::Normal,
+            vim_pending: String::new(),
+            vim_count: String::new(),
+            vim_last_find: None,
         }
     }
 }
