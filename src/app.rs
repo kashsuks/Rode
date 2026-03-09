@@ -5,7 +5,7 @@
 
 use iced_code_editor::CodeEditor;
 use iced::widget::{
-    button, column, container, markdown, mouse_area, row, scrollable, text, text_input,
+    button, column, container, markdown, mouse_area, row, scrollable, stack, text, text_input,
 };
 use iced::window;
 use iced::{Background, Color, Element, Length, Subscription};
@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::config::preferences::{self as prefs, EditorPreferences};
+use crate::autocomplete::engine::Autocomplete;
 use crate::features::command_input::CommandInput;
 use crate::features::command_palette::CommandPalette;
 use crate::features::file_tree::FileTree;
@@ -145,6 +146,7 @@ pub struct App {
     vim_pending: String,
     vim_count: String,
     vim_last_find: Option<VimFindState>,
+    autocomplete: Autocomplete,
 }
 
 impl Default for App {
@@ -223,6 +225,7 @@ impl Default for App {
             vim_pending: String::new(),
             vim_count: String::new(),
             vim_last_find: None,
+            autocomplete: Autocomplete::new(),
         }
     }
 }

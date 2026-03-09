@@ -180,7 +180,7 @@ impl App {
                         code_editor,
                         ..
                     } => {
-                        return container(
+                        let editor = container(
                             code_editor.view().map(Message::CodeEditorEvent),
                         )
                         .width(Length::Fill)
@@ -188,8 +188,112 @@ impl App {
                         .style(|_theme| container::Style {
                             background: Some(iced::Background::Color(theme().bg_editor)),
                             ..Default::default()
-                        })
-                        .into();
+                        });
+
+                        let show_panel = self.autocomplete.active
+                            && !self.autocomplete.suggestions.is_empty();
+                        if show_panel {
+                            let mut items: Vec<Element<'_, Message>> = Vec::new();
+                            let visible_count = self.autocomplete.suggestions.len().min(8);
+                            for (i, suggestion) in self.autocomplete.suggestions.iter().take(visible_count).enumerate() {
+                                let is_selected = i == self.autocomplete.selected_index;
+                                let bg_color = if is_selected {
+                                    Some(iced::Background::Color(theme().selection))
+                                } else {
+                                    None
+                                };
+                                let label_color = if is_selected {
+                                    theme().text_primary
+                                } else {
+                                    theme().text_muted
+                                };
+                                items.push(
+                                    container(
+                                        row![
+                                            text(suggestion.kind.icon())
+                                                .size(12)
+                                                .color(theme().text_placeholder),
+                                            text(&suggestion.text)
+                                                .size(12)
+                                                .color(label_color),
+                                        ]
+                                        .spacing(8)
+                                        .align_y(iced::Alignment::Center),
+                                    )
+                                    .padding(iced::Padding {
+                                        top: 3.0,
+                                        right: 10.0,
+                                        bottom: 3.0,
+                                        left: 8.0,
+                                    })
+                                    .width(Length::Fill)
+                                    .style(move |_theme| container::Style {
+                                        background: bg_color,
+                                        ..Default::default()
+                                    })
+                                    .into(),
+                                );
+                            }
+                            items.push(
+                                container(
+                                    text("↑↓ Navigate  Enter Accept  Esc Dismiss")
+                                        .size(9)
+                                        .color(theme().text_dim),
+                                )
+                                .padding(iced::Padding {
+                                    top: 2.0,
+                                    right: 8.0,
+                                    bottom: 0.0,
+                                    left: 8.0,
+                                })
+                                .into(),
+                            );
+
+                            let panel = container(column(items).spacing(1))
+                                .padding(4)
+                                .max_width(320.0)
+                                .style(|_theme| container::Style {
+                                    background: Some(iced::Background::Color(theme().bg_secondary)),
+                                    border: iced::Border {
+                                        color: theme().border_subtle,
+                                        width: 1.0,
+                                        radius: 6.0.into(),
+                                    },
+                                    shadow: iced::Shadow {
+                                        color: theme().shadow_dark,
+                                        offset: iced::Vector::new(0.0, 2.0),
+                                        blur_radius: 8.0,
+                                    },
+                                    ..Default::default()
+                                });
+
+                            // Position the autocomplete panel near the cursor
+                            let char_width: f32 = 7.8;
+                            let line_height: f32 = 20.0;
+                            let gutter_width: f32 = 48.0;
+                            let x = gutter_width + (self.cursor_col as f32 - 1.0) * char_width;
+                            let y = (self.cursor_line as f32) * line_height;
+                            // Clamp so the popup stays within the visible editor area
+                            let y = y.clamp(0.0, 560.0);
+                            let x = x.clamp(0.0, 500.0);
+
+                            let positioned_panel = container(panel)
+                                .padding(iced::Padding {
+                                    top: y,
+                                    left: x,
+                                    bottom: 0.0,
+                                    right: 0.0,
+                                })
+                                .width(Length::Fill)
+                                .height(Length::Fill);
+
+                            return stack![editor, positioned_panel]
+                                .width(Length::Fill)
+                                .height(Length::Fill)
+                                .into();
+                        }
+
+                        return editor.into();
                     }
                     TabKind::Preview { md_items } => {
                         return scrollable(

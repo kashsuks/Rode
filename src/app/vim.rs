@@ -35,10 +35,14 @@ impl App {
         match self.vim_mode {
             VimMode::Insert => {
                 if matches!(key, crate::message::VimKey::Escape) {
-                    self.vim_mode = VimMode::Normal;
-                    self.vim_pending.clear();
-                    self.vim_count.clear();
-                    self.vim_refresh_cursor_style();
+                    if self.autocomplete.active {
+                        self.autocomplete.cancel();
+                    } else {
+                        self.vim_mode = VimMode::Normal;
+                        self.vim_pending.clear();
+                        self.vim_count.clear();
+                        self.vim_refresh_cursor_style();
+                    }
                 }
                 iced::Task::none()
             }

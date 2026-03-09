@@ -1,4 +1,6 @@
 use super::*;
+use crate::autocomplete::engine::Autocomplete;
+use iced_code_editor::Message as EditorMessage;
 
 impl App {
     fn should_confirm_sensitive_open(path: &std::path::Path) -> bool {
@@ -26,40 +28,123 @@ impl App {
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
             Message::CodeEditorEvent(event) => {
+                // Autocomplete keyboard navigation — intercept before editor processing
+                if self.vim_mode == VimMode::Insert && self.autocomplete.active {
+                    if let EditorMessage::ArrowKey(dir, false) = &event {
+                        match dir {
+                            iced_code_editor::ArrowDirection::Up => {
+                                self.autocomplete.select_previous();
+                                return iced::Task::none();
+                            }
+                            iced_code_editor::ArrowDirection::Down => {
+                                self.autocomplete.select_next();
+                                return iced::Task::none();
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
                 if let Some(idx) = self.active_tab {
+                    let mut mapped_task: Option<iced::Task<Message>> = None;
+                    let mut lsp_path: Option<PathBuf> = None;
+                    let mut lsp_content: Option<String> = None;
+                    let mut cursor_sync: Option<(EditorMessage, String, String)> = None;
+                    let mut autocomplete_refresh: Option<(EditorMessage, String, PathBuf)> = None;
+                    let mut completion_applied = None::<(usize, usize)>;
+
                     if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
                             ref mut code_editor,
                             ref mut buffer,
                         } = tab.kind
                         {
-                            let task = code_editor.update(&event);
-                            buffer.set_text(&code_editor.content());
-
-                            let entity = tab.path.to_string_lossy().to_string();
-                            let should_send =
-                                match (&self.last_wakatime_entity, &self.last_wakatime_sent_at) {
-                                    (Some(last_entity), Some(last_time)) => {
-                                        &entity != last_entity
-                                            || last_time.elapsed().as_secs() >= 120
+                            if self.vim_mode == VimMode::Insert
+                                && self.autocomplete.active
+                                && matches!(event, EditorMessage::Enter)
+                            {
+                                if let Some(selected) = self.autocomplete.get_selected().cloned()
+                                {
+                                    let mut tasks = Vec::new();
+                                    let delete_count = self.autocomplete.prefix.chars().count();
+                                    let insert_count = selected.text.chars().count();
+                                    for _ in 0..delete_count {
+                                        tasks.push(code_editor.update(&EditorMessage::Backspace));
                                     }
-                                    _ => true,
-                                };
-                            if should_send {
-                                let _ = wakatime::client::send_heartbeat(
-                                    &entity,
-                                    false,
-                                    &self.wakatime,
-                                );
-                                self.last_wakatime_entity = Some(entity);
-                                self.last_wakatime_sent_at = Some(Instant::now());
+                                    for ch in selected.text.chars() {
+                                        tasks.push(
+                                            code_editor.update(
+                                                &EditorMessage::CharacterInput(ch),
+                                            ),
+                                        );
+                                    }
+                                    let after = code_editor.content();
+                                    buffer.set_text(&after);
+                                    lsp_path = Some(tab.path.clone());
+                                    lsp_content = Some(after);
+                                    mapped_task = Some(
+                                        iced::Task::batch(tasks)
+                                            .map(Message::CodeEditorEvent),
+                                    );
+                                    completion_applied = Some((delete_count, insert_count));
+                                }
                             }
 
-                            self.lsp
-                                .change_document(tab.path.clone(), code_editor.content());
-
-                            return task.map(Message::CodeEditorEvent);
+                            if mapped_task.is_none() {
+                                let before = code_editor.content();
+                                let task = code_editor.update(&event);
+                                let after = code_editor.content();
+                                buffer.set_text(&after);
+                                lsp_path = Some(tab.path.clone());
+                                lsp_content = Some(after.clone());
+                                cursor_sync = Some((event.clone(), before, after.clone()));
+                                autocomplete_refresh =
+                                    Some((event.clone(), after, tab.path.clone()));
+                                mapped_task = Some(task.map(Message::CodeEditorEvent));
+                            }
                         }
+                    }
+
+                    if let Some((delete_count, insert_count)) = completion_applied {
+                        self.cursor_col = self
+                            .cursor_col
+                            .saturating_sub(delete_count)
+                            .saturating_add(insert_count);
+                        self.autocomplete.cancel();
+                    }
+                    if let Some((event, before, after)) = cursor_sync {
+                        self.sync_cursor_from_editor_event(&event, &before, &after);
+                    }
+                    if let Some((event, after, path)) = autocomplete_refresh {
+                        self.refresh_autocomplete_for_event(&event, &after, &path);
+                    }
+
+                    if let Some(path) = lsp_path {
+                        let entity = path.to_string_lossy().to_string();
+                        let should_send =
+                            match (&self.last_wakatime_entity, &self.last_wakatime_sent_at) {
+                                (Some(last_entity), Some(last_time)) => {
+                                    &entity != last_entity
+                                        || last_time.elapsed().as_secs() >= 120
+                                }
+                                _ => true,
+                            };
+                        if should_send {
+                            let _ = wakatime::client::send_heartbeat(
+                                &entity,
+                                false,
+                                &self.wakatime,
+                            );
+                            self.last_wakatime_entity = Some(entity);
+                            self.last_wakatime_sent_at = Some(Instant::now());
+                        }
+                        if let Some(content) = lsp_content {
+                            self.lsp.change_document(path, content);
+                        }
+                    }
+
+                    if let Some(task) = mapped_task {
+                        return task;
                     }
                 }
                 iced::Task::none()
@@ -162,6 +247,9 @@ impl App {
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
+                self.cursor_line = 1;
+                self.cursor_col = 1;
+                self.autocomplete.cancel();
                 self.vim_refresh_cursor_style();
 
                 self.lsp.open_document(opened_path, opened_text);
@@ -705,6 +793,9 @@ impl App {
                     },
                 });
                 self.active_tab = Some(self.tabs.len() - 1);
+                self.cursor_line = 1;
+                self.cursor_col = 1;
+                self.autocomplete.cancel();
                 self.vim_refresh_cursor_style();
                 iced::Task::none()
             }
@@ -769,5 +860,170 @@ impl App {
                 iced::Task::none()
             }
         }
+    }
+
+    fn refresh_autocomplete_for_event(
+        &mut self,
+        event: &EditorMessage,
+        content: &str,
+        path: &std::path::Path,
+    ) {
+        if self.vim_mode != VimMode::Insert {
+            self.autocomplete.cancel();
+            return;
+        }
+
+        let should_trigger = matches!(
+            event,
+            EditorMessage::CharacterInput(_)
+                | EditorMessage::Backspace
+                | EditorMessage::Delete
+                | EditorMessage::Paste(_)
+        );
+        let should_cancel = matches!(
+            event,
+            EditorMessage::Home(_)
+                | EditorMessage::End(_)
+                | EditorMessage::CtrlHome
+                | EditorMessage::CtrlEnd
+                | EditorMessage::MouseClick(_)
+                | EditorMessage::MouseDrag(_)
+                | EditorMessage::DeleteSelection
+        );
+
+        if should_cancel {
+            self.autocomplete.cancel();
+            return;
+        }
+
+        if should_trigger {
+            let cursor_idx =
+                Self::position_to_index(content, self.cursor_line, self.cursor_col);
+            let lang = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .and_then(Autocomplete::detect_language);
+            self.autocomplete.trigger(content, cursor_idx, lang.as_deref());
+            if self.autocomplete.prefix.len() < 2 {
+                self.autocomplete.cancel();
+            }
+        }
+    }
+
+    fn sync_cursor_from_editor_event(
+        &mut self,
+        event: &EditorMessage,
+        _before: &str,
+        after: &str,
+    ) {
+        let line_count = after.lines().count().max(1);
+        self.cursor_line = self.cursor_line.clamp(1, line_count);
+        let current_len = after
+            .lines()
+            .nth(self.cursor_line.saturating_sub(1))
+            .map(|line| line.chars().count())
+            .unwrap_or(0);
+        let max_col = current_len + 1;
+        self.cursor_col = self.cursor_col.clamp(1, max_col);
+
+        match event {
+            EditorMessage::CharacterInput(ch) => {
+                if *ch == '\n' {
+                    self.cursor_line = (self.cursor_line + 1).min(line_count);
+                    self.cursor_col = 1;
+                } else {
+                    self.cursor_col += 1;
+                }
+            }
+            EditorMessage::Backspace => {
+                if self.cursor_col > 1 {
+                    self.cursor_col -= 1;
+                } else if self.cursor_line > 1 {
+                    self.cursor_line -= 1;
+                    let prev_len = after
+                        .lines()
+                        .nth(self.cursor_line.saturating_sub(1))
+                        .map(|line| line.chars().count())
+                        .unwrap_or(0);
+                    self.cursor_col = prev_len + 1;
+                }
+            }
+            EditorMessage::Enter => {
+                self.cursor_line = (self.cursor_line + 1).min(line_count);
+                self.cursor_col = 1;
+            }
+            EditorMessage::Tab => {
+                self.cursor_col += 4;
+            }
+            EditorMessage::ArrowKey(direction, _) => match direction {
+                iced_code_editor::ArrowDirection::Left => {
+                    if self.cursor_col > 1 {
+                        self.cursor_col -= 1;
+                    }
+                }
+                iced_code_editor::ArrowDirection::Right => {
+                    self.cursor_col += 1;
+                }
+                iced_code_editor::ArrowDirection::Up => {
+                    if self.cursor_line > 1 {
+                        self.cursor_line -= 1;
+                    }
+                }
+                iced_code_editor::ArrowDirection::Down => {
+                    self.cursor_line = (self.cursor_line + 1).min(line_count);
+                }
+            },
+            EditorMessage::Home(_) => self.cursor_col = 1,
+            EditorMessage::End(_) => {
+                let len = after
+                    .lines()
+                    .nth(self.cursor_line.saturating_sub(1))
+                    .map(|line| line.chars().count())
+                    .unwrap_or(0);
+                self.cursor_col = len + 1;
+            }
+            EditorMessage::CtrlHome => {
+                self.cursor_line = 1;
+                self.cursor_col = 1;
+            }
+            EditorMessage::CtrlEnd => {
+                self.cursor_line = line_count;
+                let len = after
+                    .lines()
+                    .nth(self.cursor_line.saturating_sub(1))
+                    .map(|line| line.chars().count())
+                    .unwrap_or(0);
+                self.cursor_col = len + 1;
+            }
+            _ => {}
+        }
+
+        let line_count = after.lines().count().max(1);
+        self.cursor_line = self.cursor_line.clamp(1, line_count);
+        let current_len = after
+            .lines()
+            .nth(self.cursor_line.saturating_sub(1))
+            .map(|line| line.chars().count())
+            .unwrap_or(0);
+        self.cursor_col = self.cursor_col.clamp(1, current_len + 1);
+    }
+
+    fn position_to_index(text: &str, line: usize, col: usize) -> usize {
+        let mut current_line = 1usize;
+        let mut current_col = 1usize;
+        let mut idx = 0usize;
+        for ch in text.chars() {
+            if current_line == line && current_col == col {
+                break;
+            }
+            idx += ch.len_utf8();
+            if ch == '\n' {
+                current_line += 1;
+                current_col = 1;
+            } else {
+                current_col += 1;
+            }
+        }
+        idx
     }
 }
