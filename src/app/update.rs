@@ -73,6 +73,10 @@ impl App {
                     let mut cursor_sync: Option<(EditorMessage, String, String)> = None;
                     let mut autocomplete_refresh: Option<(EditorMessage, String, PathBuf)> = None;
                     let mut completion_applied = None::<(usize, usize)>;
+                    let mut manual_cursor_update: Option<(usize, usize)> = None;
+                    let cursor_line_before = self.cursor_line;
+                    let tab_size = self.editor_preferences.tab_size.max(1);
+                    let indent_unit = self.editor_preferences.indent_unit();
 
                     if let Some(tab) = self.tabs.get_mut(idx) {
                         if let TabKind::Editor {
@@ -80,48 +84,85 @@ impl App {
                             ref mut buffer,
                         } = tab.kind
                         {
-                            if self.vim_mode == VimMode::Insert
-                                && self.autocomplete.active
+                            if mapped_task.is_none()
                                 && matches!(event, EditorMessage::Enter)
+                                && (!self.autocomplete.active
+                                    || self.autocomplete.suggestions.is_empty())
                             {
-                                if let Some(selected) = self.autocomplete.get_selected().cloned()
-                                {
-                                    let mut tasks = Vec::new();
-                                    let delete_count = self.autocomplete.prefix.chars().count();
-                                    let insert_count = selected.text.chars().count();
-                                    for _ in 0..delete_count {
-                                        tasks.push(code_editor.update(&EditorMessage::Backspace));
-                                    }
-                                    for ch in selected.text.chars() {
-                                        tasks.push(
-                                            code_editor.update(
-                                                &EditorMessage::CharacterInput(ch),
-                                            ),
-                                        );
-                                    }
+                                let before = code_editor.content();
+                                let indent = smart_indent_for_enter(
+                                    &before,
+                                    cursor_line_before,
+                                    &indent_unit,
+                                );
+                                let insert = format!("\n{indent}");
+                                let task = code_editor.update(
+                                    &EditorMessage::Paste(insert),
+                                );
+                                let after = code_editor.content();
+                                buffer.set_text(&after);
+                                let indent_cols = indent_visual_width(&indent, tab_size);
+                                manual_cursor_update = Some((
+                                    cursor_line_before.saturating_add(1),
+                                    indent_cols + 1,
+                                ));
+                                lsp_path = Some(tab.path.clone());
+                                lsp_content = Some(after);
+                                mapped_task = Some(
+                                    task.map(Message::CodeEditorEvent),
+                                );
+                            }
+
+                            if mapped_task.is_none()
+                                && matches!(
+                                    event,
+                                    EditorMessage::Tab | EditorMessage::FocusNavigationTab
+                                )
+                            {
+                                let indent = self.editor_preferences.indent_unit();
+                                let mut tasks = Vec::new();
+
+                                let mut before = code_editor.content();
+                                for ch in indent.chars() {
+                                    let task = code_editor.update(
+                                        &EditorMessage::CharacterInput(ch),
+                                    );
+                                    tasks.push(task);
                                     let after = code_editor.content();
                                     buffer.set_text(&after);
-                                    lsp_path = Some(tab.path.clone());
-                                    lsp_content = Some(after);
-                                    mapped_task = Some(
-                                        iced::Task::batch(tasks)
-                                            .map(Message::CodeEditorEvent),
-                                    );
-                                    completion_applied = Some((delete_count, insert_count));
+                                    before = after;
                                 }
+
+                                let indent_cols = indent_visual_width(&indent, tab_size);
+                                manual_cursor_update = Some((
+                                    cursor_line_before,
+                                    self.cursor_col.saturating_add(indent_cols),
+                                ));
+                                lsp_path = Some(tab.path.clone());
+                                lsp_content = Some(code_editor.content());
+                                mapped_task = Some(
+                                    iced::Task::batch(tasks)
+                                        .map(Message::CodeEditorEvent),
+                                );
                             }
 
                             if mapped_task.is_none() {
                                 let before = code_editor.content();
+                                let mut tasks = Vec::new();
                                 let task = code_editor.update(&event);
-                                let after = code_editor.content();
+                                tasks.push(task);
+                                let mut after = code_editor.content();
                                 buffer.set_text(&after);
                                 lsp_path = Some(tab.path.clone());
                                 lsp_content = Some(after.clone());
-                                cursor_sync = Some((event.clone(), before, after.clone()));
+                                cursor_sync = Some((event.clone(), before.clone(), after.clone()));
                                 autocomplete_refresh =
-                                    Some((event.clone(), after, tab.path.clone()));
-                                mapped_task = Some(task.map(Message::CodeEditorEvent));
+                                    Some((event.clone(), after.clone(), tab.path.clone()));
+
+                                mapped_task = Some(
+                                    iced::Task::batch(tasks)
+                                        .map(Message::CodeEditorEvent),
+                                );
                             }
                         }
                     }
@@ -138,6 +179,22 @@ impl App {
                     }
                     if let Some((event, after, path)) = autocomplete_refresh {
                         self.refresh_autocomplete_for_event(&event, &after, &path);
+                    }
+                    if let Some((line, col)) = manual_cursor_update {
+                        if let Some(content) = lsp_content.as_ref() {
+                            let line_count = content.lines().count().max(1);
+                            let clamped_line = line.clamp(1, line_count);
+                            let line_len = content
+                                .lines()
+                                .nth(clamped_line.saturating_sub(1))
+                                .map(|l| l.chars().count())
+                                .unwrap_or(0);
+                            self.cursor_line = clamped_line;
+                            self.cursor_col = col.clamp(1, line_len + 1);
+                        } else {
+                            self.cursor_line = line;
+                            self.cursor_col = col;
+                        }
                     }
 
                     if let Some(path) = lsp_path {
@@ -937,6 +994,22 @@ impl App {
         }
     }
 
+    fn smart_indent_for_enter(&self, content: &str) -> String {
+        let line = content
+            .lines()
+            .nth(self.cursor_line.saturating_sub(1))
+            .unwrap_or("");
+
+        let base = leading_whitespace(line);
+        let mut indent = base.clone();
+
+        if should_increase_indent(line) {
+            indent.push_str(&self.editor_preferences.indent_unit());
+        }
+
+        indent
+    }
+
     fn sync_cursor_from_editor_event(
         &mut self,
         event: &EditorMessage,
@@ -980,7 +1053,12 @@ impl App {
                 self.cursor_col = 1;
             }
             EditorMessage::Tab => {
-                self.cursor_col += 4;
+                let tab_width = if self.editor_preferences.use_spaces {
+                    self.editor_preferences.tab_size
+                } else {
+                    self.editor_preferences.tab_size.max(1)
+                };
+                self.cursor_col += tab_width;
             }
             EditorMessage::ArrowKey(direction, _) => match direction {
                 iced_code_editor::ArrowDirection::Left => {
@@ -1053,4 +1131,72 @@ impl App {
         }
         idx
     }
+
+    fn leading_whitespace(line: &str) -> String {
+        line.chars()
+            .take_while(|ch| *ch == ' ' || *ch == '\t')
+            .collect()
+    }
+
+    fn should_increase_indent(line: &str) -> bool {
+        let trimmed = line.trim_end();
+        trimmed.ends_with('{')
+            || trimmed.ends_with('[')
+            || trimmed.ends_with('(')
+            || trimmed.ends_with(':')
+    }
+}
+
+fn smart_indent_for_enter(content: &str, cursor_line: usize, indent_unit: &str) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    let mut i = cursor_line.saturating_sub(1);
+    if i >= lines.len() {
+        i = lines.len() - 1;
+    }
+
+    let mut line = lines[i];
+    if line.trim().is_empty() {
+        while i > 0 {
+            i -= 1;
+            if !lines[i].trim().is_empty() {
+                line = lines[i];
+                break;
+            }
+        }
+    }
+
+    let base = leading_whitespace(line);
+    let mut indent = base.clone();
+    if should_increase_indent(line) {
+        indent.push_str(indent_unit);
+    }
+    indent
+}
+
+fn leading_whitespace(line: &str) -> String {
+    line.chars()
+        .take_while(|ch| *ch == ' ' || *ch == '\t')
+        .collect()
+}
+
+fn should_increase_indent(line: &str) -> bool {
+    let trimmed = line.trim_end();
+    trimmed.ends_with('{')
+        || trimmed.ends_with('[')
+        || trimmed.ends_with('(')
+        || trimmed.ends_with(':')
+}
+
+fn indent_visual_width(indent: &str, tab_size: usize) -> usize {
+    indent.chars().fold(0usize, |acc, ch| {
+        if ch == '\t' {
+            acc + tab_size
+        } else {
+            acc + 1
+        }
+    })
 }
