@@ -1144,6 +1144,18 @@ impl App {
             || trimmed.ends_with('[')
             || trimmed.ends_with('(')
             || trimmed.ends_with(':')
+            || trimmed.ends_with('\\')
+    }
+
+    fn should_decrease_indent(line: &str) -> bool {
+        let trimmed = line.trim();
+        trimmed == "}"
+            || trimmed == "]"
+            || trimmed == ")"
+            || trimmed == "else"
+            || trimmed == "elif"
+            || trimmed == "finally"
+            || trimmed == "except"
     }
 }
 
