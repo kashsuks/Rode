@@ -1,4 +1,4 @@
-# AGENTS.md for Rode
+# AGENTS.md for Pinel
 
 You are an advanced Rust developer that always puts efficiency and stability as your priority.
 

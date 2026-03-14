@@ -19,7 +19,7 @@ struct GithubRelease {
 /// Errors are silently swallowed — update checks should never crash the editor.
 pub async fn check_for_update() -> Option<UpdateInfo> {
     let client = reqwest::Client::builder()
-        .user_agent(format!("rode-editor/{}", CURRENT_VERSION))
+        .user_agent(format!("pinel/{}", CURRENT_VERSION))
         .timeout(std::time::Duration::from_secs(8))
         .build()
         .ok()?;

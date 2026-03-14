@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-BIN_NAME="rode-editor"
+BIN_NAME="pinel"
 OUT_DIR="$ROOT_DIR/dist"
 mkdir -p "$OUT_DIR"
 

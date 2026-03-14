@@ -285,7 +285,7 @@ async fn run_server(
 
     if client
         .initialize_default(
-            "rode-editor",
+            "pinel",
             Some(env!("CARGO_PKG_VERSION").to_string()),
             root_uri,
         )
