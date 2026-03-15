@@ -54,7 +54,26 @@ There is planned support in the future for the following:
 
 ## 2.1 macOS
 
+Lucky for you, I develop on MacOS therefore every version (Stable, Dev, Alpha, etc) is guaranteed to have every feature on MacOS. There have been plans to have the ability to use a .DMG file for users to easily install however that requires `Gatekeeper` access for Mac meaning I would need a developer account. 
 
+That aside, here is how you can install of MacOS.
+
+You can use the following command and paste it in your terminal:
+```bash
+curl -fsSL https://pinel.netlify.app/install.sh | sh
+```
+And the script will install the editor for usage!
+
+You can also install via the `pinel-macos-x86_64` under the latest release which can be found [here](https://github.com/kashsuks/Pinel/releases)
+
+Due to the extra security that MacOS has for unverified apps, you will need to grant the app some permissions (that Gatekeeper would otherwise give by default). Here are the steps to follow:
+- Copy the path of your installation
+- Go to your terminal of choice and type in `chmod +x <the path to the install>`
+- Then run `./pinel-macos-x86_64`
+
+*Optional*: You can also add this new binary to your `$PATH` if you would like to just refer to the app as `Pinel`
+
+**For users looking for a Homebrew installation, hang tight it will be available soon**
 
 ## 2.2 Windows
 
