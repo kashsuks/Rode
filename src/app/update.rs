@@ -101,8 +101,11 @@ impl App {
                     let mut cursor_sync: Option<(EditorMessage, String, String)> = None;
                     let mut autocomplete_refresh: Option<(EditorMessage, String, PathBuf)> = None;
                     let mut manual_cursor_update: Option<(usize, usize)> = None;
-                    let mut hover_candidate:
-                        Option<(PathBuf, iced_code_editor::LspPosition, iced::Point)> = None;
+                    let mut hover_candidate: Option<(
+                        PathBuf,
+                        iced_code_editor::LspPosition,
+                        iced::Point,
+                    )> = None;
                     let cursor_line_before = self.cursor_line;
                     let tab_size = self.editor_preferences.tab_size.max(1);
                     let indent_unit = self.editor_preferences.indent_unit();
@@ -579,14 +582,7 @@ impl App {
                     path,
                     name,
                     kind: TabKind::Editor {
-                        code_editor: {
-                            let mut editor = iced_code_editor::CodeEditor::new(&content, &ext);
-                            editor.set_search_replace_enabled(false);
-                            editor.set_line_numbers_enabled(true);
-                            editor.set_wrap_enabled(false);
-                            editor.set_font_size(13.0, true);
-                            editor
-                        },
+                        code_editor: { self.configured_code_editor(&content, &ext) },
                         buffer: crate::features::editor_buffer::EditorBuffer::from_text(&content),
                     },
                 });
@@ -1231,6 +1227,7 @@ impl App {
             Message::SettingsSelectTheme(name) => {
                 let new_theme = crate::theme::builtin_theme(&name);
                 crate::theme::set_theme(new_theme);
+                self.apply_editor_theme_to_tabs();
                 self.active_theme_name = name.clone();
                 self.editor_preferences.theme_name = name;
                 self.theme_dropdown_open = false;
@@ -1242,6 +1239,7 @@ impl App {
                 let lua_theme = theme_manager::load_theme();
                 let t = crate::theme::ThemeColors::from_lua_theme(&lua_theme);
                 crate::theme::set_theme(t);
+                self.apply_editor_theme_to_tabs();
                 self.active_theme_name = "Custom (theme.lua)".to_string();
                 self.editor_preferences.theme_name = "Custom (theme.lua)".to_string();
                 self.theme_dropdown_open = false;
@@ -1323,11 +1321,7 @@ impl App {
             }
             Message::NewFile => {
                 let new_path = PathBuf::from("untitled");
-                let mut editor = iced_code_editor::CodeEditor::new("", "txt");
-                editor.set_search_replace_enabled(false);
-                editor.set_line_numbers_enabled(true);
-                editor.set_wrap_enabled(false);
-                editor.set_font_size(13.0, true);
+                let editor = self.configured_code_editor("", "txt");
                 self.tabs.push(Tab {
                     path: new_path,
                     name: "untitled".to_string(),

@@ -1,4 +1,5 @@
 use iced::Color;
+use iced_code_editor::theme::Style as CodeEditorStyle;
 use once_cell::sync::Lazy;
 use std::str::FromStr;
 use std::sync::RwLock;
@@ -83,6 +84,7 @@ pub struct ThemeColors {
     pub selection: Color,
     pub shadow_dark: Color,
     pub shadow_light: Color,
+    pub editor_style: CodeEditorStyle,
     pub syntax_theme: SynTheme,
 }
 
@@ -259,6 +261,28 @@ fn build_palette_syntax_theme() -> SynTheme {
     }
 }
 
+fn editor_style(
+    background: Color,
+    text_color: Color,
+    gutter_background: Color,
+    gutter_border: Color,
+    line_number_color: Color,
+    scrollbar_background: Color,
+    scroller_color: Color,
+    current_line_highlight: Color,
+) -> CodeEditorStyle {
+    CodeEditorStyle {
+        background,
+        text_color,
+        gutter_background,
+        gutter_border,
+        line_number_color,
+        scrollbar_background,
+        scroller_color,
+        current_line_highlight,
+    }
+}
+
 impl Default for ThemeColors {
     fn default() -> Self {
         // Default is Pinel Blueberry Dark — built lazily to avoid recursion
@@ -326,6 +350,16 @@ impl ThemeColors {
             selection: Color::from_rgba(blue_c.r, blue_c.g, blue_c.b, 0.3),
             shadow_dark: Color::from_rgba(crust.r, crust.g, crust.b, 0.5),
             shadow_light: Color::from_rgba(surface2.r, surface2.g, surface2.b, 0.08),
+            editor_style: editor_style(
+                base,
+                text_c,
+                surface0,
+                surface1,
+                ov2,
+                base,
+                blue_c,
+                Color::from_rgba(blue_c.r, blue_c.g, blue_c.b, 0.12),
+            ),
             syntax_theme: syn,
         }
     }
@@ -453,6 +487,16 @@ fn pinel_blueberry_dark() -> ThemeColors {
         selection: Color::from_rgba(purple.r, purple.g, purple.b, 0.25),
         shadow_dark: Color::from_rgba(0.0, 0.0, 0.0, 0.55),
         shadow_light: Color::from_rgba(purple.r, purple.g, purple.b, 0.06),
+        editor_style: editor_style(
+            Color::from_rgb(0.058, 0.058, 0.090),
+            Color::from_rgb(0.772, 0.800, 0.882),
+            Color::from_rgb(0.082, 0.082, 0.122),
+            Color::from_rgb(0.149, 0.149, 0.212),
+            Color::from_rgb(0.424, 0.439, 0.525),
+            Color::from_rgb(0.058, 0.058, 0.090),
+            blue,
+            Color::from_rgba(0.647, 0.690, 0.906, 0.12),
+        ),
         syntax_theme: syn,
     }
 }
@@ -529,6 +573,16 @@ fn pinel_blueberry_light() -> ThemeColors {
         selection: Color::from_rgba(purple.r, purple.g, purple.b, 0.18),
         shadow_dark: Color::from_rgba(0.298, 0.310, 0.412, 0.18),
         shadow_light: Color::from_rgba(purple.r, purple.g, purple.b, 0.05),
+        editor_style: editor_style(
+            Color::from_rgb(0.983, 0.985, 0.991),
+            Color::from_rgb(0.565, 0.608, 0.686),
+            Color::from_rgb(0.945, 0.949, 0.972),
+            Color::from_rgb(0.894, 0.906, 0.929),
+            Color::from_rgb(0.620, 0.635, 0.715),
+            Color::from_rgb(0.983, 0.985, 0.991),
+            blue,
+            Color::from_rgba(0.647, 0.690, 0.906, 0.14),
+        ),
         syntax_theme: syn,
     }
 }
@@ -588,6 +642,16 @@ fn gruvbox_dark() -> ThemeColors {
         selection: Color::from_rgba(0.514, 0.647, 0.596, 0.3),
         shadow_dark: Color::from_rgba(0.110, 0.110, 0.102, 0.5),
         shadow_light: Color::from_rgba(0.396, 0.380, 0.357, 0.08),
+        editor_style: editor_style(
+            bg0,
+            fg1,
+            bg1,
+            bg2,
+            fg4,
+            bg0,
+            blue,
+            Color::from_rgba(0.514, 0.647, 0.596, 0.14),
+        ),
         syntax_theme: syn,
     }
 }
@@ -649,6 +713,16 @@ fn github_dark() -> ThemeColors {
         selection: Color::from_rgba(0.310, 0.565, 0.961, 0.3),
         shadow_dark: Color::from_rgba(0.0, 0.0, 0.0, 0.5),
         shadow_light: Color::from_rgba(0.188, 0.208, 0.235, 0.08),
+        editor_style: editor_style(
+            bg,
+            fg1,
+            bg1,
+            bg2,
+            fg2,
+            bg,
+            blue,
+            Color::from_rgba(0.310, 0.565, 0.961, 0.12),
+        ),
         syntax_theme: syn,
     }
 }
@@ -697,6 +771,16 @@ fn nord() -> ThemeColors {
         selection: Color::from_rgba(0.533, 0.753, 0.816, 0.3),
         shadow_dark: Color::from_rgba(0.180, 0.204, 0.251, 0.5),
         shadow_light: Color::from_rgba(0.298, 0.337, 0.416, 0.08),
+        editor_style: editor_style(
+            polar0,
+            snow0,
+            polar1,
+            polar2,
+            polar3,
+            polar0,
+            frost2,
+            Color::from_rgba(0.533, 0.753, 0.816, 0.12),
+        ),
         syntax_theme: syn,
     }
 }
@@ -761,6 +845,16 @@ fn tokyonight() -> ThemeColors {
         selection: Color::from_rgba(0.486, 0.631, 0.984, 0.3),
         shadow_dark: Color::from_rgba(0.063, 0.071, 0.129, 0.5),
         shadow_light: Color::from_rgba(0.200, 0.212, 0.302, 0.08),
+        editor_style: editor_style(
+            bg,
+            fg,
+            bg1,
+            bg2,
+            fg_dark,
+            bg,
+            blue,
+            Color::from_rgba(0.486, 0.631, 0.984, 0.12),
+        ),
         syntax_theme: syn,
     }
 }
@@ -807,6 +901,16 @@ fn ayu_dark() -> ThemeColors {
         selection: Color::from_rgba(0.224, 0.651, 0.925, 0.3),
         shadow_dark: Color::from_rgba(0.0, 0.0, 0.0, 0.5),
         shadow_light: Color::from_rgba(0.180, 0.200, 0.235, 0.08),
+        editor_style: editor_style(
+            bg,
+            fg,
+            bg1,
+            bg2,
+            fg2,
+            bg,
+            blue,
+            Color::from_rgba(0.224, 0.651, 0.925, 0.12),
+        ),
         syntax_theme: syn,
     }
 }

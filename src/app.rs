@@ -292,4 +292,24 @@ impl App {
             }
         }
     }
+
+    pub(super) fn configured_code_editor(&self, content: &str, syntax: &str) -> CodeEditor {
+        let mut editor = iced_code_editor::CodeEditor::new(content, syntax);
+        editor.set_theme(theme().editor_style);
+        editor.set_search_replace_enabled(false);
+        editor.set_line_numbers_enabled(true);
+        editor.set_wrap_enabled(false);
+        editor.set_font_size(13.0, true);
+        editor
+    }
+
+    pub(super) fn apply_editor_theme_to_tabs(&mut self) {
+        let editor_style = theme().editor_style;
+
+        for tab in &mut self.tabs {
+            if let TabKind::Editor { code_editor, .. } = &mut tab.kind {
+                code_editor.set_theme(editor_style);
+            }
+        }
+    }
 }
