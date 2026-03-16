@@ -16,7 +16,21 @@ pub struct CommandPalette {
 
 impl Default for CommandPalette {
     fn default() -> Self {
-        let commands = vec![
+        let commands = Self::commands_for(false);
+        let filtered = commands.clone();
+
+        Self {
+            open: false,
+            input: String::new(),
+            commands,
+            filtered_commands: filtered,
+        }
+    }
+}
+
+impl CommandPalette {
+    fn commands_for(include_markdown_render: bool) -> Vec<Command> {
+        let mut commands = vec![
             Command {
                 name: "Theme".to_string(),
                 description: "Open theme settings".to_string(),
@@ -59,22 +73,21 @@ impl Default for CommandPalette {
             },
         ];
 
-        let filtered = commands.clone();
-
-        Self {
-            open: false,
-            input: String::new(),
-            commands,
-            filtered_commands: filtered,
+        if include_markdown_render {
+            commands.push(Command {
+                name: "Render Markdown".to_string(),
+                description: "Open a live markdown preview beside the editor".to_string(),
+            });
         }
-    }
-}
 
-impl CommandPalette {
-    pub fn toggle(&mut self) {
+        commands
+    }
+
+    pub fn toggle(&mut self, include_markdown_render: bool) {
         self.open = !self.open;
         if self.open {
             self.input.clear();
+            self.commands = Self::commands_for(include_markdown_render);
             self.filtered_commands = self.commands.clone();
         }
     }
@@ -85,7 +98,8 @@ impl CommandPalette {
         self.filtered_commands.clear();
     }
 
-    pub fn filter_commands(&mut self) {
+    pub fn filter_commands(&mut self, include_markdown_render: bool) {
+        self.commands = Self::commands_for(include_markdown_render);
         let input_lower = self.input.to_lowercase();
 
         if input_lower.is_empty() {

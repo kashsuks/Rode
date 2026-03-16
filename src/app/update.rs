@@ -9,6 +9,43 @@ impl App {
             .is_some_and(|name| name == ".env" || name.starts_with(".env."))
     }
 
+    fn is_markdown_path(path: &std::path::Path) -> bool {
+        matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("md" | "markdown" | "mdown" | "mdx")
+        )
+    }
+
+    fn active_tab_supports_markdown_preview(&self) -> bool {
+        self.active_tab
+            .and_then(|idx| self.tabs.get(idx))
+            .is_some_and(|tab| {
+                matches!(tab.kind, TabKind::Editor { .. }) && Self::is_markdown_path(&tab.path)
+            })
+    }
+
+    fn sync_markdown_preview_from_active_editor(&mut self) {
+        let Some(preview) = self.markdown_preview.as_mut() else {
+            return;
+        };
+
+        let Some(idx) = self.active_tab else {
+            return;
+        };
+
+        let Some(tab) = self.tabs.get(idx) else {
+            return;
+        };
+
+        if preview.source_path != tab.path {
+            return;
+        }
+
+        if let TabKind::Editor { ref code_editor, .. } = tab.kind {
+            preview.state = frostmark::MarkState::with_html_and_markdown(&code_editor.content());
+        }
+    }
+
     fn open_path_task(path: PathBuf) -> iced::Task<Message> {
         iced::Task::perform(
             async move {
@@ -392,6 +429,8 @@ impl App {
                         }
                     }
 
+                    self.sync_markdown_preview_from_active_editor();
+
                     if let Some(task) = mapped_task {
                         return task;
                     }
@@ -513,6 +552,13 @@ impl App {
                     {
                         code_editor.detach_lsp();
                     }
+                    if self
+                        .markdown_preview
+                        .as_ref()
+                        .is_some_and(|preview| preview.source_path == path)
+                    {
+                        self.markdown_preview = None;
+                    }
                     self.lsp_diagnostics.remove(&path);
                     self.lsp_server_keys.remove(&path);
                     self.tabs.remove(idx);
@@ -541,6 +587,14 @@ impl App {
                     {
                         code_editor.detach_lsp();
                     }
+                    if self
+                        .markdown_preview
+                        .as_ref()
+                        .is_some_and(|preview| preview.source_path == path)
+                    {
+                        self.markdown_preview = None;
+                    }
+
                     self.lsp_diagnostics.remove(&path);
                     self.lsp_server_keys.remove(&path);
                     self.tabs.remove(idx);
@@ -840,25 +894,37 @@ impl App {
                 window::oldest().and_then(move |id| window::maximize(id, true))
             }
             Message::PreviewMarkdown => {
-                if let Some(idx) = self.active_tab {
-                    if let Some(tab) = self.tabs.get(idx) {
-                        if let TabKind::Editor {
-                            ref code_editor, ..
-                        } = tab.kind
-                        {
-                            let text = code_editor.content();
-                            let md_items: Vec<markdown::Item> = markdown::parse(&text).collect();
-                            let preview_name = format!("Preview: {}", tab.name);
-                            let path = tab.path.clone();
-                            self.tabs.push(Tab {
-                                path,
-                                name: preview_name,
-                                kind: TabKind::Preview { md_items },
-                            });
-                            self.active_tab = Some(self.tabs.len() - 1);
-                        }
-                    }
+                let Some(idx) = self.active_tab else {
+                    return iced::Task::none();
+                };
+
+                let Some(tab) = self.tabs.get(idx) else {
+                    return iced::Task::none();
+                };
+
+                if !Self::is_markdown_path(&tab.path) {
+                    return iced::Task::none();
                 }
+
+                let TabKind::Editor { ref code_editor, .. } = tab.kind else {
+                    return iced::Task::none();
+                };
+
+                if self
+                    .markdown_preview
+                    .as_ref()
+                    .is_some_and(|preview| preview.source_path == tab.path)
+                {
+                    self.markdown_preview = None;
+                } else {
+                    self.markdown_preview = Some(MarkdownPreviewPane {
+                        source_path: tab.path.clone(),
+                        state: frostmark::MarkState::with_html_and_markdown(
+                            &code_editor.content(),
+                        ),
+                    });
+                }
+
                 iced::Task::none()
             }
             Message::MarkdownLinkClicked(_uri) => iced::Task::none(),
@@ -1080,7 +1146,8 @@ impl App {
                 iced::Task::none()
             }
             Message::ToggleCommandPalette => {
-                self.command_palette.toggle();
+                let include_markdown_render = self.active_tab_supports_markdown_preview();
+                self.command_palette.toggle(include_markdown_render);
                 self.command_palette_selected = 0;
                 if self.command_palette.open {
                     self.vim_refresh_cursor_style();
@@ -1091,7 +1158,8 @@ impl App {
             }
             Message::CommandPaletteQueryChanged(query) => {
                 self.command_palette.input = query;
-                self.command_palette.filter_commands();
+                self.command_palette
+                    .filter_commands(self.active_tab_supports_markdown_preview());
                 self.command_palette_selected = 0;
                 iced::widget::operation::focus(self.command_palette_input_id.clone())
             }

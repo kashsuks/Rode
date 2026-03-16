@@ -1,4 +1,5 @@
 use super::*;
+use frostmark::MarkWidget;
 use iced::widget::column;
 
 impl App {
@@ -201,7 +202,7 @@ impl App {
                         let show_panel = !self.lsp_enabled
                             && self.autocomplete.active
                             && !self.autocomplete.suggestions.is_empty();
-                        if show_panel {
+                        let editor_stack: Element<'_, Message> = if show_panel {
                             // ── Purple autocomplete modal with navigation ───────────────────
                             let kind_color = |kind: &crate::autocomplete::types::SuggestionKind| {
                                 use crate::autocomplete::types::SuggestionKind;
@@ -370,16 +371,59 @@ impl App {
                                 .width(Length::Fill)
                                 .height(Length::Fill);
 
-                            return stack![editor, positioned_panel, lsp_overlay]
+                            stack![editor, positioned_panel, lsp_overlay]
                                 .width(Length::Fill)
                                 .height(Length::Fill)
-                                .into();
-                        }
+                                .into()
+                        } else {
+                            stack![editor, lsp_overlay]
+                                .width(Length::Fill)
+                                .height(Length::Fill)
+                                .into()
+                        };
 
-                        return stack![editor, lsp_overlay]
-                            .width(Length::Fill)
+                        if let Some(preview) = self
+                            .markdown_preview
+                            .as_ref()
+                            .filter(|preview| preview.source_path == tab.path)
+                        {
+                            let separator = container(text(""))
+                                .width(Length::Fixed(1.0))
+                                .height(Length::Fill)
+                                .style(|_theme| container::Style {
+                                    background: Some(iced::Background::Color(Color::from_rgba(
+                                        1.0, 1.0, 1.0, 0.08,
+                                    ))),
+                                    ..Default::default()
+                                });
+
+                            let preview_panel = container(
+                                scrollable(
+                                    container(MarkWidget::new(&preview.state))
+                                        .padding(16)
+                                        .width(Length::Fill),
+                                )
+                                .height(Length::Fill),
+                            )
+                            .width(Length::FillPortion(1))
+                            .height(Length::Fill)
+                            .style(|_theme| container::Style {
+                                background: Some(iced::Background::Color(theme().bg_secondary)),
+                                ..Default::default()
+                            });
+
+                            return row![
+                                container(editor_stack)
+                                    .width(Length::FillPortion(1))
+                                    .height(Length::Fill),
+                                separator,
+                                preview_panel,
+                            ]
                             .height(Length::Fill)
                             .into();
+                        }
+
+                        return editor_stack;
                     }
                     TabKind::Preview { md_items } => {
                         return scrollable(

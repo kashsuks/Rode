@@ -47,6 +47,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "s
 url = "2.5"
 ropey = "1.6"
 iced-code-editor = { version = "0.3.7", features = ["lsp-process"] }
+frostmark = "0.3"
 
 quinn-proto = "0.11.14"
 bytes = "1.11.1"

@@ -3,6 +3,7 @@
 //! This module defines [`App`] and splits its behavior into focused submodules:
 //! event updates, subscriptions, commands, and view builders.
 
+use frostmark::MarkState;
 use iced::widget::{
     button, column, container, markdown, mouse_area, row, scrollable, stack, text, text_input,
 };
@@ -68,6 +69,11 @@ pub struct Tab {
     pub kind: TabKind,
 }
 
+pub struct MarkdownPreviewPane {
+    pub source_path: PathBuf,
+    pub state: MarkState,
+}
+
 /// toast notification metadata.
 #[derive(Debug, Clone)]
 pub struct Notification {
@@ -121,6 +127,8 @@ pub struct App {
     command_palette: CommandPalette,
     command_palette_selected: usize,
     command_palette_input_id: iced::widget::Id,
+
+    markdown_preview: Option<MarkdownPreviewPane>,
 
     terminal: Terminal,
     terminal_pane: Option<IcedTerminal>,
@@ -224,6 +232,8 @@ impl Default for App {
             command_palette: CommandPalette::default(),
             command_palette_selected: 0,
             command_palette_input_id: iced::widget::Id::unique(),
+
+            markdown_preview: None,
 
             terminal: Terminal::default(),
             terminal_pane: {
