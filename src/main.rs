@@ -11,7 +11,9 @@ mod theme;
 mod ui;
 mod wakatime;
 
-const FIRA_CODE: &[u8] = include_bytes!("assets/fonts/FiraCode-Bold.ttf");
+const FIRA_CODE_BOLD: &[u8] = include_bytes!("assets/fonts/FiraCode-Bold.ttf");
+const FIRA_CODE_REGULAR: &[u8] = include_bytes!("assets/fonts/FiraCode-Regular.ttf");
+const SF_PRO: &[u8] = include_bytes!("assets/fonts/SF-Pro.ttf");
 
 fn main() -> iced::Result {
     // Augment PATH with well-known LSP server locations before anything else.
@@ -33,9 +35,11 @@ fn main() -> iced::Result {
     iced::application(app::App::new, app::App::update, app::App::view)
         .title("Pinel")
         .subscription(|app| app.subscription())
-        .font(FIRA_CODE)
+        .font(FIRA_CODE_BOLD)
+        .font(FIRA_CODE_REGULAR)
+        .font(SF_PRO)
         .default_font(iced::Font {
-            family: iced::font::Family::Name("Fira Code"),
+            family: iced::font::Family::Name("SF Pro"),
             ..iced::Font::DEFAULT
         })
         .window_size((window_width, window_height))

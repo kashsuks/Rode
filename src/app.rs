@@ -296,6 +296,11 @@ impl App {
     pub(super) fn configured_code_editor(&self, content: &str, syntax: &str) -> CodeEditor {
         let mut editor = iced_code_editor::CodeEditor::new(content, syntax);
         editor.set_theme(theme().editor_style);
+        editor.set_font(iced::Font {
+            family: iced::font::Family::Name("Fira Code"),
+            weight: iced::font::Weight::Normal,
+            ..iced::Font::DEFAULT
+        });
         editor.set_search_replace_enabled(false);
         editor.set_line_numbers_enabled(true);
         editor.set_wrap_enabled(false);
