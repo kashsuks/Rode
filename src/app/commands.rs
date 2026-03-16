@@ -63,7 +63,7 @@ impl App {
                     Message::ToggleFullscreen(window::Mode::Fullscreen)
                 });
             }
-            "Preview Markdown" => {
+            "Render Markdown" => {
                 return iced::Task::perform(async {}, |_| Message::PreviewMarkdown);
             }
             _ => {}
