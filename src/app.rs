@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 use crate::autocomplete::engine::Autocomplete;
 use crate::config::preferences::{self as prefs, EditorPreferences};
+use crate::scripting::{self, EditorCommand};
 use crate::features::command_input::CommandInput;
 use crate::features::command_palette::CommandPalette;
 use crate::features::file_tree::FileTree;
@@ -205,7 +206,7 @@ impl Default for App {
             }
         };
 
-        Self {
+        let mut app = Self {
             tabs: Vec::new(),
             active_tab: None,
             cursor_line: 1,
@@ -288,7 +289,13 @@ impl Default for App {
             autocomplete: Autocomplete::new(),
             developer_logs: VecDeque::new(),
             developer_panel_visible: false,
+        };
+
+        for command in scripting::load_startup_commands() {
+            app.apply_editor_command(command);
         }
+
+        app
     }
 }
 
@@ -324,6 +331,44 @@ impl App {
         for tab in &mut self.tabs {
             if let TabKind::Editor { code_editor, .. } = &mut tab.kind {
                 code_editor.set_theme(editor_style);
+            }
+        }
+    }
+
+    pub fn apply_editor_command(&mut self, command: EditorCommand) {
+        match command {
+            EditorCommand::UseBuiltinTheme(name) => {
+                let new_theme = crate::theme::builtin_theme(&name);
+                crate::theme::set_theme(new_theme);
+                self.apply_editor_theme_to_tabs();
+                self.active_theme_name = name.clone();
+                self.editor_preferences.theme_name = name;
+            }
+            EditorCommand::SetThemeColor { name, value } => {
+                let color = match crate::theme::parse_hex_color(&value) {
+                    Ok(color) => color,
+                    Err(err) => {
+                        eprintln!("Lua theme error: {err}");
+                        return;
+                    }
+                };
+
+                let mut current = crate::theme::theme().clone();
+                if let Err(err) = current.set_named_color(&name, color) {
+                    eprintln!("Lua theme error: {err}");
+                    return;
+                }
+
+                crate::theme::set_theme(current);
+                self.apply_editor_theme_to_tabs();
+                self.active_theme_name = "Custom (init.lua)".to_string();
+                self.editor_preferences.theme_name = "Custom (init.lua)".to_string();
+            }
+            EditorCommand::SetSidebarVisible(visible) => {
+                self.sidebar_visible = visible;
+            }
+            EditorCommand::SetSidebarWidth(width) => {
+                self.sidebar_width = width.clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
             }
         }
     }
