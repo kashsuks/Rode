@@ -6,6 +6,7 @@ mod config;
 mod features;
 mod lsp_setup;
 mod message;
+mod scripting;
 mod subscriptions;
 mod theme;
 mod ui;

@@ -1,0 +1,5 @@
+pinel.theme.use_builtin("Nord")
+pinel.theme.set_color("bg_tab_bar", "#202a36")
+pinel.theme.set_color("editor.gutter_background", "#242f3c")
+pinel.ui.show_sidebar(true)
+pinel.ui.set_sidebar_width(240)

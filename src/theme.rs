@@ -63,6 +63,7 @@ pub const BG_CRUST: Color = Color::from_rgb(0.067, 0.067, 0.106); // #11111b
 // ThemeColors – the struct the rest of the app consumes
 // ═══════════════════════════════════════════════════════════════════════════
 
+#[derive(Clone)]
 pub struct ThemeColors {
     pub bg_primary: Color,
     pub bg_secondary: Color,
@@ -376,6 +377,72 @@ pub fn theme() -> std::sync::RwLockReadGuard<'static, ThemeColors> {
 pub fn set_theme(t: ThemeColors) {
     let mut w = THEME.write().unwrap();
     *w = t;
+}
+
+pub fn parse_hex_color(input: &str) -> Result<Color, String> {
+    let hex = input.trim().trim_start_matches('#');
+
+    match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16)
+                .map_err(|_| format!("invalid color: {input}"))?;
+            let g = u8::from_str_radix(&hex[2..4], 16)
+                .map_err(|_| format!("invalid color: {input}"))?;
+            let b = u8::from_str_radix(&hex[4..6], 16)
+                .map_err(|_| format!("invalid color: {input}"))?;
+            Ok(Color::from_rgb8(r, g, b))
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16)
+                .map_err(|_| format!("invalid color: {input}"))?;
+            let g = u8::from_str_radix(&hex[2..4], 16)
+                .map_err(|_| format!("invalid color: {input}"))?;
+            let b = u8::from_str_radix(&hex[4..6], 16)
+                .map_err(|_| format!("invalid color: {input}"))?;
+            let a = u8::from_str_radix(&hex[6..8], 16)
+                .map_err(|_| format!("invalid color: {input}"))?;
+            Ok(Color::from_rgba8(r, g, b, a as f32 / 255.0))
+        }
+        _ => Err(format!("expected #RRGGBB or #RRGGBBAA, got: {input}")),
+    }
+}
+
+impl ThemeColors {
+    pub fn set_named_color(&mut self, name: &str, color: Color) -> Result<(), String> {
+        match name {
+            "bg_primary" => self.bg_primary = color,
+            "bg_secondary" => self.bg_secondary = color,
+            "bg_editor" => self.bg_editor = color,
+            "bg_tab_active" => self.bg_tab_active = color,
+            "bg_tab_inactive" => self.bg_tab_inactive = color,
+            "bg_status_bar" => self.bg_status_bar = color,
+            "bg_tab_bar" => self.bg_tab_bar = color,
+            "bg_hover" => self.bg_hover = color,
+            "bg_pressed" => self.bg_pressed = color,
+            "bg_drag_handle" => self.bg_drag_handle = color,
+            "text_primary" => self.text_primary = color,
+            "text_secondary" => self.text_secondary = color,
+            "text_muted" => self.text_muted = color,
+            "text_dim" => self.text_dim = color,
+            "text_placeholder" => self.text_placeholder = color,
+            "border_subtle" => self.border_subtle = color,
+            "border_very_subtle" => self.border_very_subtle = color,
+            "selection" => self.selection = color,
+            "shadow_dark" => self.shadow_dark = color,
+            "shadow_light" => self.shadow_light = color,
+            "editor.background" => self.editor_style.background = color,
+            "editor.text_color" => self.editor_style.text_color = color,
+            "editor.gutter_background" => self.editor_style.gutter_background = color,
+            "editor.gutter_border" => self.editor_style.gutter_border = color,
+            "editor.line_number_color" => self.editor_style.line_number_color = color,
+            "editor.scrollbar_background" => self.editor_style.scrollbar_background = color,
+            "editor.scroller_color" => self.editor_style.scroller_color = color,
+            "editor.current_line_highlight" => self.editor_style.current_line_highlight = color,
+            _ => return Err(format!("unknown theme color: {name}")),
+        }
+
+        Ok(())
+    }
 }
 
 /// Public alias to construct a Pinel Blueberry Dark theme (used by app startup).
