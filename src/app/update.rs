@@ -964,6 +964,7 @@ impl App {
                 iced::Task::none()
             }
             Message::InputLog(line) => {
+                eprintln!("{line}");
                 self.dev_log(line);
                 iced::Task::none()
             }
