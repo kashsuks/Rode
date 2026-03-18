@@ -196,7 +196,7 @@ jobs:
 
           package() {
               cd "$srcdir"/Pinel-*
-              install -Dm755 "target/release/pinel-editor" "$pkgdir/usr/bin/pinel"
+              install -Dm755 "target/release/pinel" "$pkgdir/usr/bin/pinel"
           }
           EOF
 
@@ -216,11 +216,11 @@ jobs:
           depends=()
           provides=('pinel')
           conflicts=('pinel' 'pinel-bin' 'pinel-dev' 'pinel-bin-dev')
-          source=("pinel-editor-$pkgver::https://github.com/kashsuks/Pinel/releases/download/${{ needs.prepare-release.outputs.release_tag }}/${{ needs.prepare-release.outputs.crate_name }}-linux-x86_64")
+          source=("pinel-$pkgver::https://github.com/kashsuks/Pinel/releases/download/${{ needs.prepare-release.outputs.release_tag }}/${{ needs.prepare-release.outputs.crate_name }}-linux-x86_64")
           sha256sums=('SKIP')
 
           package() {
-              install -Dm755 "$srcdir/pinel-editor-$pkgver" "$pkgdir/usr/bin/pinel"
+              install -Dm755 "$srcdir/pinel-$pkgver" "$pkgdir/usr/bin/pinel"
           }
           EOF
 
