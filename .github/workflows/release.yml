@@ -102,7 +102,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Prepare asset
         shell: bash
@@ -147,7 +147,7 @@ jobs:
         shell: bash
         run: |
           cargo login "${{ secrets.CRATES_IO }}"
-          cargo publish --locked --allow-dirty
+          cargo publish --allow-dirty
           rm -f ~/.cargo/credentials
 
   update-aur:
@@ -186,7 +186,7 @@ jobs:
 
           build() {
               cd "$srcdir"/Pinel-*
-              cargo build --release --locked
+              cargo build --release
           }
 
           package() {
