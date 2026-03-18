@@ -1,5 +1,5 @@
 [package]
-name = "pinel-editor"
+name = "pinel"
 version = "0.4.3"
 edition = "2021"
 authors = ["Kashyap Sukshavas"]
