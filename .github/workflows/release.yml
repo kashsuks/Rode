@@ -3,38 +3,82 @@ name: Release
 on:
   push:
     branches: [ "master" ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check-version:
+  prepare-release:
     runs-on: ubuntu-latest
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
-      version: ${{ steps.check.outputs.version }}
+      base_version: ${{ steps.check.outputs.base_version }}
+      publish_version: ${{ steps.check.outputs.publish_version }}
+      release_tag: ${{ steps.check.outputs.release_tag }}
+      release_name: ${{ steps.check.outputs.release_name }}
+      release_channel: ${{ steps.check.outputs.release_channel }}
+      crate_name: ${{ steps.check.outputs.crate_name }}
+      aur_version: ${{ steps.check.outputs.aur_version }}
+      aur_source_pkgname: ${{ steps.check.outputs.aur_source_pkgname }}
+      aur_binary_pkgname: ${{ steps.check.outputs.aur_binary_pkgname }}
     steps:
       - uses: actions/checkout@v4
       
-      - name: Check version and release status
+      - name: Resolve release metadata
         id: check
+        shell: bash
         run: |
-          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml)
-          echo "version=$version" >> $GITHUB_OUTPUT
-          
-          latest_release=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
-            grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/' || echo "none")
-          
-          if [ "$latest_release" != "$version" ]; then
-            echo "should_release=true" >> $GITHUB_OUTPUT
+          base_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+          base_crate_name=$(sed -n 's/^name = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            release_channel="dev"
+            publish_version="${base_version}-dev.${{ github.run_number }}"
+            release_tag="v${publish_version}"
+            release_name="v${base_version} @dev"
+            crate_name="${base_crate_name}-dev"
+            aur_version="${base_version}_dev.${{ github.run_number }}"
+            aur_source_pkgname="pinel-dev"
+            aur_binary_pkgname="pinel-bin-dev"
+            should_release="true"
           else
-            echo "should_release=false" >> $GITHUB_OUTPUT
+            release_channel="stable"
+            publish_version="${base_version}"
+            release_tag="v${base_version}"
+            release_name="v${base_version} @stable"
+            crate_name="${base_crate_name}"
+            aur_version="${base_version}"
+            aur_source_pkgname="pinel"
+            aur_binary_pkgname="pinel-bin"
+
+            if curl -sfL \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${release_tag}" \
+              >/dev/null; then
+              should_release="false"
+            else
+              should_release="true"
+            fi
           fi
 
+          {
+            echo "should_release=${should_release}"
+            echo "base_version=${base_version}"
+            echo "publish_version=${publish_version}"
+            echo "release_tag=${release_tag}"
+            echo "release_name=${release_name}"
+            echo "release_channel=${release_channel}"
+            echo "crate_name=${crate_name}"
+            echo "aur_version=${aur_version}"
+            echo "aur_source_pkgname=${aur_source_pkgname}"
+            echo "aur_binary_pkgname=${aur_binary_pkgname}"
+          } >> "$GITHUB_OUTPUT"
+
   build-and-release:
-    needs: check-version
-    if: needs.check-version.outputs.should_release == 'true'
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_release == 'true'
     permissions:
       contents: write
     runs-on: ${{ matrix.os }}
@@ -60,116 +104,132 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Prepare asset
         shell: bash
         run: |
-          binary_name=$(sed -n 's/^name = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+          binary_name="${{ needs.prepare-release.outputs.crate_name }}"
+          source_binary=$(sed -n 's/^name = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
           cd target/${{ matrix.target }}/release
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp ${binary_name}.exe ../../${binary_name}-${{ matrix.asset_suffix }}
+            cp ${source_binary}.exe ../../${binary_name}-${{ matrix.asset_suffix }}
           else
-            cp ${binary_name} ../../${binary_name}-${{ matrix.asset_suffix }}
+            cp ${source_binary} ../../${binary_name}-${{ matrix.asset_suffix }}
           fi
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1
         with:
           files: target/*-${{ matrix.asset_suffix }}
-          tag_name: v${{ needs.check-version.outputs.version }}
+          tag_name: ${{ needs.prepare-release.outputs.release_tag }}
+          name: ${{ needs.prepare-release.outputs.release_name }}
+          prerelease: ${{ needs.prepare-release.outputs.release_channel == 'dev' }}
           body: |
-            Release v${{ needs.check-version.outputs.version }}
+            Release: ${{ needs.prepare-release.outputs.release_name }}
+            Tag: ${{ needs.prepare-release.outputs.release_tag }}
             Commit: ${{ github.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
   publish-crate:
-    needs: check-version
-    if: needs.check-version.outputs.should_release == 'true'
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Adjust crate metadata for dev publish
+        if: needs.prepare-release.outputs.release_channel == 'dev'
+        shell: bash
+        run: |
+          perl -0pi -e 's/^name = "[^"]*"/name = "${{ needs.prepare-release.outputs.crate_name }}"/m' Cargo.toml
+          perl -0pi -e 's/^version = "[^"]*"/version = "${{ needs.prepare-release.outputs.publish_version }}"/m' Cargo.toml
         
       - name: Publish to crates.io
+        shell: bash
         run: |
-          cargo login ${{ secrets.CRATES_IO }}
-          cargo publish --allow-dirty
+          cargo login "${{ secrets.CRATES_IO }}"
+          cargo publish --locked --allow-dirty
           rm -f ~/.cargo/credentials
 
   update-aur:
-    needs: [check-version, build-and-release]
-    if: needs.check-version.outputs.should_release == 'true'
+    needs: [prepare-release, build-and-release]
+    if: needs.prepare-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - pkgname: pinel
+          - package_type: source
             build_from_source: true
-          - pkgname: pinel-bin
+          - package_type: binary
             build_from_source: false
     steps:
       - uses: actions/checkout@v4
 
       - name: Generate PKGBUILD for source package
         if: matrix.build_from_source
+        shell: bash
         run: |
           cat > PKGBUILD << 'EOF'
           # Maintainer: kashyap <ksukshavasi@gmail.com>
-          pkgname=pinel
-          pkgver=${{ needs.check-version.outputs.version }}
+          pkgname=${{ needs.prepare-release.outputs.aur_source_pkgname }}
+          pkgver=${{ needs.prepare-release.outputs.aur_version }}
           pkgrel=1
-          pkgdesc="(somewhat) fast text editor written in rust"
+          pkgdesc="(somewhat) fast text editor written in rust (${{ needs.prepare-release.outputs.release_channel }} release)"
           arch=('x86_64')
           url="https://github.com/kashsuks/Pinel"
           license=('GPL3')
           depends=()
           makedepends=('rust' 'cargo')
-          source=("$pkgname-$pkgver.tar.gz::https://github.com/kashsuks/Pinel/archive/v$pkgver.tar.gz")
+          provides=('pinel')
+          conflicts=('pinel' 'pinel-dev')
+          source=("$pkgname-$pkgver.tar.gz::https://github.com/kashsuks/Pinel/archive/refs/tags/${{ needs.prepare-release.outputs.release_tag }}.tar.gz")
           sha256sums=('SKIP')
 
           build() {
-              cd "$srcdir/Pinel-$pkgver"
+              cd "$srcdir"/Pinel-*
               cargo build --release --locked
           }
 
           package() {
-              cd "$srcdir/Pinel-$pkgver"
-              install -Dm755 "target/release/pinel" "$pkgdir/usr/bin/pinel"
+              cd "$srcdir"/Pinel-*
+              install -Dm755 "target/release/pinel-editor" "$pkgdir/usr/bin/pinel"
           }
           EOF
 
       - name: Generate PKGBUILD for binary package
         if: ${{ !matrix.build_from_source }}
+        shell: bash
         run: |
           cat > PKGBUILD << 'EOF'
           # Maintainer: kashyap <ksukshavasi@gmail.com>
-          pkgname=pinel-bin
-          pkgver=${{ needs.check-version.outputs.version }}
+          pkgname=${{ needs.prepare-release.outputs.aur_binary_pkgname }}
+          pkgver=${{ needs.prepare-release.outputs.aur_version }}
           pkgrel=1
-          pkgdesc="(somewhat) fast text editor written in rust (binary release)"
+          pkgdesc="(somewhat) fast text editor written in rust (${{ needs.prepare-release.outputs.release_channel }} binary release)"
           arch=('x86_64')
           url="https://github.com/kashsuks/Pinel"
           license=('GPL3')
           depends=()
           provides=('pinel')
-          conflicts=('pinel')
-          source=("pinel-$pkgver::https://github.com/kashsuks/Pinel/releases/download/v$pkgver/pinel-linux-x86_64")
+          conflicts=('pinel' 'pinel-bin' 'pinel-dev' 'pinel-bin-dev')
+          source=("pinel-editor-$pkgver::https://github.com/kashsuks/Pinel/releases/download/${{ needs.prepare-release.outputs.release_tag }}/${{ needs.prepare-release.outputs.crate_name }}-linux-x86_64")
           sha256sums=('SKIP')
 
           package() {
-              install -Dm755 "$srcdir/pinel-$pkgver" "$pkgdir/usr/bin/pinel"
+              install -Dm755 "$srcdir/pinel-editor-$pkgver" "$pkgdir/usr/bin/pinel"
           }
           EOF
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v2.7.0
         with:
-          pkgname: ${{ matrix.pkgname }}
+          pkgname: ${{ matrix.build_from_source && needs.prepare-release.outputs.aur_source_pkgname || needs.prepare-release.outputs.aur_binary_pkgname }}
           pkgbuild: ./PKGBUILD
           commit_username: kashyap
           commit_email: ksukshavasi@gmail.com
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: Update to ${{ needs.check-version.outputs.version }}
+          commit_message: Update to ${{ needs.prepare-release.outputs.aur_version }} (${{ needs.prepare-release.outputs.release_channel }})
