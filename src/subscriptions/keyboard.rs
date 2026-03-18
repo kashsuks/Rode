@@ -26,10 +26,8 @@ pub fn shortcuts() -> Subscription<Message> {
             }
 
             if let Key::Character(c) = &key {
-                if modifiers.command() && modifiers.control() {
-                    if c.as_str() == "f" {
-                        return Some(Message::ToggleFullscreen(window::Mode::Fullscreen));
-                    }
+                if modifiers.command() && modifiers.control() && c.as_str() == "f" {
+                    return Some(Message::ToggleFullscreen(window::Mode::Fullscreen));
                 } else if primary && modifiers.shift() {
                     match c.as_str() {
                         "v" | "V" => return Some(Message::PreviewMarkdown),
