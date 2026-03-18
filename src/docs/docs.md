@@ -109,7 +109,7 @@ tar xzf pinel.tar.gz
 
 Pinel currently has support through the following package managers:
 
-- [Crates.io](https://crates.io/)
+- [Crates.io](https://crates.io/crates/pinel)
 ```bash
 cargo install pinel
 ```
