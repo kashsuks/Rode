@@ -274,6 +274,14 @@ function build() {
   });
   fs.writeFileSync(path.join(SITE_DIR, "about.html"), aboutHtml);
 
+  // Copy installer script so it can be fetched via curl during setup
+  const installerSrc = path.join(PAGES_DIR, "install.sh");
+  if (fs.existsSync(installerSrc)) {
+    const installerDest = path.join(SITE_DIR, "install.sh");
+    fs.copyFileSync(installerSrc, installerDest);
+    fs.chmodSync(installerDest, 0o755);
+  }
+
   console.log("Built site → _site/ (home, install, about, docs)");
 }
 
