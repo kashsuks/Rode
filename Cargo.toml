@@ -13,7 +13,6 @@ include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
 [dependencies]
 eframe = "0.29"
-egui = "0.29"
 image = "0.24"
 resvg = "0.29"
 usvg = "0.29"
