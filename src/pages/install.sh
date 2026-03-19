@@ -5,6 +5,7 @@ REPO="${PINEL_REPO:-kashsuks/Pinel}"
 BIN_NAME="pinel"
 INSTALL_DIR="${PINEL_INSTALL_DIR:-${HOME}/.local/bin}"
 API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+TMP_DIR=""
 
 log() {
   printf '%s\n' "$*" >&2
@@ -17,6 +18,12 @@ fail() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+cleanup() {
+  if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
+    rm -rf "$TMP_DIR"
+  fi
 }
 
 detect_target() {
@@ -58,15 +65,14 @@ extract_value() {
 }
 
 download_from_release() {
-  local version base_url candidate tmp_dir archive_path binary_path
+  local version base_url candidate archive_path binary_path
 
   version="$(extract_value tag_name)"
   version="${version#v}"
   [[ -n "$version" ]] || fail "could not determine latest release version"
 
   base_url="https://github.com/${REPO}/releases/download/v${version}"
-  tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' EXIT
+  TMP_DIR="$(mktemp -d)"
 
   for candidate in \
     "${BIN_NAME}-${TARGET}.tar.gz" \
@@ -74,23 +80,23 @@ download_from_release() {
     "${BIN_NAME}-${TARGET}" \
     "${BIN_NAME}-${TARGET}.zip"
   do
-    archive_path="${tmp_dir}/${candidate}"
+    archive_path="${TMP_DIR}/${candidate}"
     if curl -fsSL "$base_url/$candidate" -o "$archive_path"; then
       case "$candidate" in
         *.tar.gz|*.tgz)
-          tar -xzf "$archive_path" -C "$tmp_dir"
+          tar -xzf "$archive_path" -C "$TMP_DIR"
           ;;
         *.zip)
           need_cmd unzip
-          unzip -oq "$archive_path" -d "$tmp_dir"
+          unzip -oq "$archive_path" -d "$TMP_DIR"
           ;;
         *)
           chmod +x "$archive_path"
-          mv "$archive_path" "${tmp_dir}/${BIN_NAME}"
+          mv "$archive_path" "${TMP_DIR}/${BIN_NAME}"
           ;;
       esac
 
-      binary_path="$(find "$tmp_dir" -type f -name "$BIN_NAME" -perm -u+x | head -n 1)"
+      binary_path="$(find "$TMP_DIR" -type f -name "$BIN_NAME" -perm -u+x | head -n 1)"
       [[ -n "$binary_path" ]] || fail "downloaded asset did not contain a ${BIN_NAME} binary"
 
       mkdir -p "$INSTALL_DIR"
@@ -105,12 +111,13 @@ download_from_release() {
 
 install_with_cargo() {
   need_cmd cargo
-  cargo install pinel --version "0.4.3-dev.83" --locked
+  cargo install "${BIN_NAME}" --locked
   log "installed ${BIN_NAME} with cargo"
 }
 
 main() {
   need_cmd curl
+  trap cleanup EXIT INT TERM
   detect_target
   fetch_release_metadata
 
