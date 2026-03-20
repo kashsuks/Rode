@@ -1,6 +1,9 @@
-![logo](https://i.imgur.com/E0oNrjO.png)
+<img width="1078" height="592" alt="image" src="https://github.com/user-attachments/assets/4c7c65c7-5afb-4e1d-affb-1d3e02746671" />
 
-*A blazingly fast test/code editor written in **rust** and built on top of [egui](https://docs.rs/egui/latest/egui/) that works out of the box.*
+
+*A fast and extensible code editor built on top of [iced](https://iced.rs) that works out of the box.*
+
+Refer to [the website](https://pinel.netlify.app) for further information
 
 ---
 
@@ -11,7 +14,7 @@ Pinel is shipped across multiple platforms, mainly *Github Releases* and [crates
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kashsuks/Pinel/main/install.sh | bash
+curl -fsSL https://pinel.netlify.app/install.sh | sh
 ```
 
 The installer downloads the latest matching GitHub release for your platform and installs `pinel` into `~/.local/bin` by default. If no prebuilt release asset exists for the current platform, it falls back to `cargo install pinel --locked`.
