@@ -1,13 +1,13 @@
 [package]
 name = "pinel"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 authors = ["Kashyap Sukshavas"]
 description = "A lightweight editor built with rust"
 license = "GPL-3.0-only"
 repository = "https://github.com/kashsuks/Pinel"
 readme = "README.md"
-keywords = ["editor", "terminal", "egui"]
+keywords = ["editor", "terminal", "iced"]
 categories = ["development-tools"]
 include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
