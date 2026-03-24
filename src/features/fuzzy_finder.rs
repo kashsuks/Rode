@@ -8,7 +8,6 @@ pub struct FileEntry {
     pub display_name: String,
 }
 
-/// State for the fuzzy finder overlay.
 pub struct FuzzyFinder {
     pub open: bool,
     pub input: String,
@@ -16,8 +15,7 @@ pub struct FuzzyFinder {
     all_files: Vec<FileEntry>,
     pub filtered_files: Vec<FileEntry>,
     pub selected_index: usize,
-    /// Cached preview: (path that was loaded, file content string)
-    pub preview_cache: Option<(PathBuf, String)>,
+    pub preview_cache: Option<(PathBuf, String)>, // Cached preview: (path that was loaded, file content string)
     pub input_id: iced::widget::Id,
 }
 
@@ -36,7 +34,6 @@ impl Default for FuzzyFinder {
     }
 }
 
-/// Directories to skip while scanning.
 const IGNORED_DIRS: &[&str] = &[
     ".git",
     "node_modules",
@@ -51,7 +48,6 @@ const IGNORED_DIRS: &[&str] = &[
 ];
 
 impl FuzzyFinder {
-    /// Toggle open / closed.  Resets state on open.
     pub fn toggle(&mut self) {
         self.open = !self.open;
         if self.open {
@@ -62,7 +58,6 @@ impl FuzzyFinder {
         }
     }
 
-    /// Close and reset.
     pub fn close(&mut self) {
         self.open = false;
         self.input.clear();
@@ -79,7 +74,6 @@ impl FuzzyFinder {
         self.selected_index = 0;
     }
 
-    /// Re-filter after the query changes.
     pub fn filter(&mut self) {
         if self.input.is_empty() {
             self.filtered_files = self.all_files.clone();
@@ -111,7 +105,6 @@ impl FuzzyFinder {
         self.preview_cache = None;
     }
 
-    /// Navigate selection up or down.
     pub fn navigate(&mut self, delta: i32) {
         let count = self.filtered_files.len();
         if count == 0 {
@@ -122,7 +115,6 @@ impl FuzzyFinder {
         self.update_preview();
     }
 
-    /// Select the currently highlighted entry; returns its path.
     pub fn select(&mut self) -> Option<PathBuf> {
         let path = self
             .filtered_files
@@ -132,7 +124,6 @@ impl FuzzyFinder {
         path
     }
 
-    /// Ensure the preview cache matches the currently selected file.
     pub fn update_preview(&mut self) {
         let Some(entry) = self.filtered_files.get(self.selected_index) else {
             self.preview_cache = None;
@@ -140,7 +131,7 @@ impl FuzzyFinder {
         };
         if let Some((cached_path, _)) = &self.preview_cache {
             if cached_path == &entry.path {
-                return; // already cached
+                return;
             }
         }
         // Read first ~200 lines for preview (no need to load huge files)
@@ -150,7 +141,6 @@ impl FuzzyFinder {
         self.preview_cache = Some((entry.path.clone(), truncated));
     }
 
-    /// Get the extension of the currently selected file (for syntax highlighting).
     pub fn selected_extension(&self) -> &str {
         self.filtered_files
             .get(self.selected_index)
@@ -159,8 +149,6 @@ impl FuzzyFinder {
             .unwrap_or("")
     }
 }
-
-// ── Directory scanner ───────────────────────────────────────────────────────
 
 fn scan_directory(dir: &Path, root: &Path) -> Vec<FileEntry> {
     let mut files = Vec::new();
@@ -201,8 +189,16 @@ fn scan_directory(dir: &Path, root: &Path) -> Vec<FileEntry> {
     files
 }
 
-// ── Fuzzy matching algorithm ────────────────────────────────────────────────
-
+/// Fuzzy matching algorithm for the inbuilt fuzzy finder
+/// 
+/// # Arguments
+/// 
+/// - `text` (`&str`) - Input text to fuzzy find provided by user.
+/// - `pattern` (`&str`) - String pattern that it follows.
+/// 
+/// # Returns
+/// 
+/// - `i32` - Final results for the fuzzy finder.
 fn fuzzy_match(text: &str, pattern: &str) -> i32 {
     if pattern.is_empty() {
         return 1;
@@ -217,12 +213,10 @@ fn fuzzy_match(text: &str, pattern: &str) -> i32 {
         if pattern_idx < pattern_chars.len() && ch == pattern_chars[pattern_idx] {
             score += 100;
 
-            // Bonus for consecutive matches
             if pattern_idx > 0 && i > 0 && text_chars[i - 1] == pattern_chars[pattern_idx - 1] {
                 score += 50;
             }
 
-            // Bonus for word-boundary matches
             if i == 0
                 || text_chars[i - 1] == '/'
                 || text_chars[i - 1] == '_'

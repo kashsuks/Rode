@@ -41,6 +41,7 @@ impl IconCacheKey {
     }
 }
 
+/// Detemine width and height of svg icons to be rendered.
 fn rasterize_svg_icon(bytes: &'static [u8], size: u32) -> Option<image::Handle> {
     let options = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_data(bytes, &options).ok()?;
@@ -60,6 +61,7 @@ fn rasterize_svg_icon(bytes: &'static [u8], size: u32) -> Option<image::Handle> 
     ))
 }
 
+/// Detemine width and height of png icons to be rendered.
 fn rasterize_png_icon(bytes: &'static [u8], size: u32) -> Option<image::Handle> {
     let image = ::image::load_from_memory(bytes).ok()?.into_rgba8();
     let resized = if image.width() == size && image.height() == size {
@@ -133,7 +135,6 @@ fn resolve_icon(base: &str, name: &str) -> IconAsset {
     }
 }
 
-// ── File extension → icon name ──────────────────────────────────────────────
 static FILE_EXT_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     HashMap::from([
         ("rs", "rust"),
@@ -284,7 +285,6 @@ static FILE_EXT_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     ])
 });
 
-// ── Full filename → icon name ───────────────────────────────────────────────
 static FILE_NAME_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     HashMap::from([
         ("dockerfile", "docker"),
@@ -346,7 +346,6 @@ static FILE_NAME_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     ])
 });
 
-// ── Folder name → icon name ─────────────────────────────────────────────────
 static FOLDER_NAME_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     HashMap::from([
         ("src", "src"),
@@ -400,12 +399,11 @@ static FOLDER_NAME_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(||
 pub fn get_file_icon(filename: &str) -> IconAsset {
     let filename_lower = filename.to_lowercase();
 
-    // 1. Try exact filename match
     if let Some(&icon_name) = FILE_NAME_MAP.get(filename_lower.as_str()) {
         return resolve_icon("", icon_name);
     }
 
-    // 2. Try compound extension (e.g. "test.spec.ts" → "spec.ts")
+    // Try compound extension (e.g. "test.spec.ts" → "spec.ts")
     let parts: Vec<&str> = filename_lower.split('.').collect();
     for i in 1..parts.len() {
         let compound_ext = parts[i..].join(".");
@@ -414,14 +412,14 @@ pub fn get_file_icon(filename: &str) -> IconAsset {
         }
     }
 
-    // 3. Try simple extension
+    // Try simple extension
     if let Some(ext) = Path::new(filename).extension().and_then(|e| e.to_str()) {
         if let Some(&icon_name) = FILE_EXT_MAP.get(ext.to_lowercase().as_str()) {
             return resolve_icon("", icon_name);
         }
     }
 
-    // 4. Default file icon
+    // Default file icon
     resolve_icon("", "file")
 }
 

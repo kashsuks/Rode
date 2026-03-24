@@ -7,7 +7,6 @@ use iced_code_editor::{LspClient, LspEvent, LspProcessClient};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-/// Manages LSP event channels and workspace configuration.
 pub struct LspManager {
     sender: mpsc::Sender<LspEvent>,
     receiver: Option<mpsc::Receiver<LspEvent>>,
@@ -41,7 +40,6 @@ impl LspManager {
         Ok(Box::new(client))
     }
 
-    /// Drains all pending LSP events from the channel.
     pub fn drain_events(&mut self) -> Vec<LspEvent> {
         let mut events = Vec::new();
         if let Some(ref receiver) = self.receiver {
@@ -106,6 +104,25 @@ fn path_to_file_uri(path: &Path) -> String {
     format!("file://{}", normalized)
 }
 
+/// Provides structure for Inline diagnostic
+/// 
+/// # Fields
+/// 
+/// - `line` (`usize`) - The line that the user requires a diagnostic for.
+/// - `severity` (`lsp_types`) - What severity is the error/warning in the users code.
+/// - `message` (`String`) - The message that the LSP provides for inline diagnostic visuals.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use crate::lsp;
+/// 
+/// let s = InlineDiagnostic {
+///     line: value,
+///     severity: value,
+///     message: value,
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct InlineDiagnostic {
     pub line: usize,

@@ -26,6 +26,11 @@ impl Default for FindReplace {
     }
 }
 
+/// Provides implementation types for the Find and Replace modal
+/// 
+/// # Arguments
+/// 
+/// - `&mut self` (`undefined`) - Provides the attrubutes for `Self`.
 impl FindReplace {
     pub fn toggle(&mut self) {
         self.open = !self.open;
@@ -40,6 +45,16 @@ impl FindReplace {
         self.open = false;
     }
 
+    /// Uses string matching to find matches within scope.
+    /// 
+    /// # Arguments
+    /// 
+    /// - `&mut self` (`undefined`) - Provides the parameters and arguments for `Self`.
+    /// - `text` (`&str`) - Text to search and find matches over.
+    /// 
+    /// # Returns
+    /// 
+    /// - `Vec<usize>` - All of the possible matches based on the string matching algorithm.
     pub fn find_matches(&mut self, text: &str) -> Vec<usize> {
         if self.find_text.is_empty() {
             self.matches.clear();
