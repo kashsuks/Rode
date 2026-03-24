@@ -19,6 +19,13 @@ usvg = "0.29"
 tiny-skia = "0.11"
 include_dir = "0.7"
 regex = "1.10"
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+ratatui = "0.29"
+crossterm = "0.28"
+tempfile = "3.15"
+ssh2 = { version = "0.9", features = ["vendored-openssl"] }
+whoami = "1.5"
 
 tree-sitter-highlight = "0.25"
 tree-sitter = "0.25"
