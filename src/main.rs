@@ -1,3 +1,7 @@
+/// This file is responsible for starting up the process
+/// and defining as well as starting up the cli tool
+/// for ssh connection
+
 use clap::Parser;
 use iced::window;
 use std::path::PathBuf;
@@ -40,7 +44,7 @@ fn run_gui(startup_path: Option<PathBuf>) -> iced::Result {
     lsp_setup::ensure_lsp_paths();
     iced_code_editor::ensure_rust_analyzer_config();
 
-    let icon_data = include_bytes!("assets/icon.png");
+    let icon_data = include_bytes!("assets/icon.png"); // when an icon is created, set it to src/assets/icon.png
     let icon = window::icon::from_file_data(icon_data, None).expect("Failed to load icon.");
     let prefs = config::preferences::load_preferences();
     let window_width = prefs.window_width.max(640.0);

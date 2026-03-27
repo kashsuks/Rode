@@ -1,6 +1,6 @@
 //! LSP server path setup for GUI launch environments.
 //!
-//! macOS GUI applications (launched from Finder, Spotlight, or a dock) do **not**
+//! macOS GUI applications (launched from Finder, Spotlight, or a dock) do NOT
 //! inherit the rich `PATH` that a login shell provides.  This means that language
 //! servers installed via `rustup`, `npm`/`nvm`, Homebrew, or `pip` are invisible
 //! to the process even though `which` finds them fine in a terminal.
@@ -10,7 +10,7 @@
 //! [`LspProcessClient`] can spawn server processes without extra user
 //! configuration.
 //!
-//! # Supported locations
+//! Supported locations
 //!
 //! | Tool / server            | Location added                                   |
 //! |--------------------------|--------------------------------------------------|
@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 
 /// Augments `PATH` with all common LSP server installation directories.
 ///
-/// Call this **once** at the very beginning of `main()`, before any LSP client
+/// Call this once at the very beginning of `main()`, before any LSP client
 /// is created.  The function is safe to call on any platform and is a no-op if
 /// the `HOME` environment variable is not set.
 ///
@@ -48,7 +48,6 @@ use std::path::{Path, PathBuf};
 /// }
 /// ```
 pub fn ensure_lsp_paths() {
-    // Collect candidate directories in priority order (highest first).
     let mut candidates: LinkedList<PathBuf> = LinkedList::new();
 
     let home = match home_dir() {
@@ -59,31 +58,24 @@ pub fn ensure_lsp_paths() {
         }
     };
 
-    // ── Rust / rustup ────────────────────────────────────────────────────────
     push_if_exists(&mut candidates, home.join(".cargo").join("bin"));
 
-    // ── Homebrew (Apple Silicon & Intel) ─────────────────────────────────────
     push_if_exists(&mut candidates, PathBuf::from("/opt/homebrew/bin"));
     push_if_exists(&mut candidates, PathBuf::from("/opt/homebrew/sbin"));
     push_if_exists(&mut candidates, PathBuf::from("/usr/local/bin"));
     push_if_exists(&mut candidates, PathBuf::from("/usr/local/sbin"));
 
-    // ── Go ───────────────────────────────────────────────────────────────────
-    // 1. ~/go/bin  (default GOPATH on modern Go)
     push_if_exists(&mut candidates, home.join("go").join("bin"));
-    // 2. $GOPATH/bin  (user-set GOPATH)
     if let Ok(gopath) = std::env::var("GOPATH") {
         for segment in gopath.split(':') {
             let p = PathBuf::from(segment).join("bin");
             push_if_exists(&mut candidates, p);
         }
     }
-    // 3. $GOBIN
     if let Ok(gobin) = std::env::var("GOBIN") {
         push_if_exists(&mut candidates, PathBuf::from(gobin));
     }
 
-    // ── Node / npm via nvm ───────────────────────────────────────────────────
     // nvm stores node versions under  ~/.nvm/versions/node/vX.Y.Z/bin/.
     // We find all installed versions, sort them newest-first, and add each
     // bin dir so that the latest installed node's global packages are first.
@@ -97,7 +89,6 @@ pub fn ensure_lsp_paths() {
         }
     }
 
-    // ── Node / npm via fnm ───────────────────────────────────────────────────
     // fnm stores versions under  ~/.local/share/fnm/node-versions/vX.Y.Z/installation/bin/
     let fnm_dir = home
         .join(".local")
@@ -112,7 +103,6 @@ pub fn ensure_lsp_paths() {
         }
     }
 
-    // ── npm global prefix (non-nvm installs) ─────────────────────────────────
     // Common locations: /usr/local/lib/node_modules/.bin  or
     // ~/.npm-global/bin
     push_if_exists(&mut candidates, home.join(".npm-global").join("bin"));
@@ -121,27 +111,20 @@ pub fn ensure_lsp_paths() {
         PathBuf::from("/usr/local/lib/node_modules/.bin"),
     );
 
-    // ── Bun ──────────────────────────────────────────────────────────────────
     push_if_exists(&mut candidates, home.join(".bun").join("bin"));
 
-    // ── pip / pipx / uv ──────────────────────────────────────────────────────
     push_if_exists(&mut candidates, home.join(".local").join("bin"));
 
-    // Python framework bins on macOS
-    // e.g. /Library/Frameworks/Python.framework/Versions/3.x/bin
     add_python_framework_bins(&mut candidates);
 
-    // Python version managers: pyenv, conda
     push_if_exists(&mut candidates, home.join(".pyenv").join("shims"));
     push_if_exists(&mut candidates, home.join(".pyenv").join("bin"));
     if let Ok(conda_prefix) = std::env::var("CONDA_PREFIX") {
         push_if_exists(&mut candidates, PathBuf::from(&conda_prefix).join("bin"));
     }
 
-    // ── Volta (node version manager) ─────────────────────────────────────────
     push_if_exists(&mut candidates, home.join(".volta").join("bin"));
 
-    // ── Apply ────────────────────────────────────────────────────────────────
     if candidates.is_empty() {
         return;
     }
@@ -158,14 +141,11 @@ pub fn ensure_lsp_paths() {
     if new_segments.is_empty() {
         return;
     }
-
     let augmented = if current_path.is_empty() {
         new_segments.join(":")
     } else {
         format!("{}:{}", new_segments.join(":"), current_path)
     };
-
-    // SAFETY: single-threaded at this point (called before iced spawns threads)
     std::env::set_var("PATH", &augmented);
 
     eprintln!(
@@ -175,6 +155,7 @@ pub fn ensure_lsp_paths() {
         new_segments.join(", ")
     );
 }
+
 
 /// Verifies that a specific LSP server binary is resolvable on the (possibly
 /// augmented) `PATH` and returns its absolute path, or `None`.
@@ -220,16 +201,10 @@ pub fn lsp_server_status() -> Vec<(&'static str, Option<PathBuf>)> {
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/// Returns the user's home directory from the `HOME` environment variable.
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
-/// Appends `path` to `list` only if it is an existing directory.
 fn push_if_exists(list: &mut LinkedList<PathBuf>, path: PathBuf) {
     if path.is_dir() {
         list.push_back(path);
@@ -311,9 +286,6 @@ fn add_python_framework_bins(candidates: &mut LinkedList<PathBuf>) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
