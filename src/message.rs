@@ -103,6 +103,7 @@ pub enum Message {
     SaveWakaTimeSettings,
 
     DismissNotification,
+    ModifierStateChanged(iced::keyboard::Modifiers),
     LspTick,
     AutosaveTick,
     AutosaveFinished(PathBuf, String, Result<(), String>),

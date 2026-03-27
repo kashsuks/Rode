@@ -94,3 +94,19 @@ pub fn input_debug() -> Subscription<Message> {
         _ => None,
     })
 }
+
+pub fn modifier_state() -> Subscription<Message> {
+    iced::event::listen_with(|event, _status, _id| match event {
+        Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
+            Some(Message::ModifierStateChanged(modifiers))
+        }
+        Event::Keyboard(iced::keyboard::Event::KeyPressed { modifiers, .. }) => {
+            Some(Message::ModifierStateChanged(modifiers))
+        }
+        Event::Keyboard(iced::keyboard::Event::KeyReleased { modifiers, .. }) => {
+            Some(Message::ModifierStateChanged(modifiers))
+        }
+
+        _ => None,
+    })
+}

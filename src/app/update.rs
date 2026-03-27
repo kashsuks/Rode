@@ -167,6 +167,10 @@ impl App {
     /// * `message` - The event to process.
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
+            Message::ModifierStateChanged(modifiers) => {
+                self.modifier_state = modifiers;
+                iced::Task::none()
+            }
             Message::FocusEditor => {
                 self.focused_pane = FocusPane::Editor;
                 if let Some(idx) = self.active_tab {
@@ -192,6 +196,12 @@ impl App {
                 iced::Task::none()
             }
             Message::CodeEditorEvent(event) => {
+                if matches!(event, EditorMessage::CharacterInput(_))
+                    && (self.modifier_state.command() || self.modifier_state.control())
+                {
+                    return iced::Task::none();
+                }
+
                 // Autocomplete keyboard navigation — intercept before editor processing
                 if self.autocomplete.active && !self.lsp_enabled {
                     if let EditorMessage::ArrowKey(dir, false) = &event {

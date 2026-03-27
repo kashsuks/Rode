@@ -4,6 +4,7 @@
 //! event updates, subscriptions, commands, and view builders.
 
 use frostmark::MarkState;
+use iced::keyboard::Modifiers;
 use iced::widget::{
     button, column, container, markdown, mouse_area, row, scrollable, stack, text, text_input,
 };
@@ -176,6 +177,7 @@ pub struct App {
     pending_sensitive_open: Option<PathBuf>,
 
     autocomplete: Autocomplete,
+    modifier_state: Modifiers,
 
     developer_logs: VecDeque<(Instant, String)>,
     developer_panel_visible: bool,
@@ -297,6 +299,7 @@ impl Default for App {
             pending_hover_request: None,
             pending_sensitive_open: None,
             autocomplete: Autocomplete::new(),
+            modifier_state: Modifiers::default(),
             developer_logs: VecDeque::new(),
             developer_panel_visible: false,
         };
